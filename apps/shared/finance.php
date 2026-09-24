@@ -534,10 +534,14 @@ function request_withdrawal(array $input, array $actor): string
         $withdrawalId = (int) $connection->lastInsertId();
         $connection->prepare(
             'UPDATE carteiras
-             SET saldo_disponivel_pontos = saldo_disponivel_pontos - :points,
-                 saldo_reservado_pontos = saldo_reservado_pontos + :points
+             SET saldo_disponivel_pontos = saldo_disponivel_pontos - :available_points,
+                 saldo_reservado_pontos = saldo_reservado_pontos + :reserved_points
              WHERE id = :id'
-        )->execute(['points' => $points, 'id' => $walletRow['id']]);
+        )->execute([
+            'available_points' => $points,
+            'reserved_points' => $points,
+            'id' => $walletRow['id'],
+        ]);
         $ledger = $connection->prepare(
             "INSERT INTO lancamentos_pontos
                 (uuid, carteira_id, usuario_id, tipo, pontos, origem_tipo, origem_uuid, idempotency_key, descricao)
@@ -648,10 +652,14 @@ function transition_withdrawal(array $input, array $actor): void
             }
             $connection->prepare(
                 'UPDATE carteiras
-                 SET saldo_disponivel_pontos = saldo_disponivel_pontos + :points,
-                     saldo_reservado_pontos = saldo_reservado_pontos - :points
+                 SET saldo_disponivel_pontos = saldo_disponivel_pontos + :available_points,
+                     saldo_reservado_pontos = saldo_reservado_pontos - :reserved_points
                  WHERE id = :id'
-            )->execute(['points' => $points, 'id' => $walletRow['id']]);
+            )->execute([
+                'available_points' => $points,
+                'reserved_points' => $points,
+                'id' => $walletRow['id'],
+            ]);
             $connection->prepare(
                 "UPDATE solicitacoes_saque
                  SET status = 'recusado', analisado_por_usuario_id = :actor_id,
