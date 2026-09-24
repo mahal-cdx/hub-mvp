@@ -28,6 +28,11 @@ function config(?string $key = null): mixed
             throw new RuntimeException('APP_KEY deve possuir pelo menos 32 caracteres.');
         }
 
+        $sessionSecure = env_bool('SESSION_SECURE', $environment === 'production');
+        if ($environment === 'production' && !$sessionSecure) {
+            throw new RuntimeException('SESSION_SECURE deve estar ativo em production.');
+        }
+
         $values = [
             'name' => env_value('APP_NAME', 'Threeebs Hub'),
             'environment' => $environment,
@@ -35,7 +40,7 @@ function config(?string $key = null): mixed
             'url' => rtrim(env_value('APP_URL', 'http://localhost:6041'), '/'),
             'app_key' => $appKey,
             'app_root' => env_value('ADMIN_APP_ROOT', '/var/www/app'),
-            'session_secure' => env_bool('SESSION_SECURE', $environment === 'production'),
+            'session_secure' => $sessionSecure,
             'session_idle_timeout' => max(300, (int) env_value('SESSION_IDLE_TIMEOUT', '1800')),
             'session_absolute_timeout' => max(1800, (int) env_value('SESSION_ABSOLUTE_TIMEOUT', '28800')),
             'trust_proxy_headers' => env_bool('TRUST_PROXY_HEADERS', false),

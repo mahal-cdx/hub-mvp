@@ -78,8 +78,25 @@ function start_secure_session(): void
         $created = $now;
     }
 
+    $expectedAgentHash = keyed_hash('user_agent', substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 512));
+    $storedAgentHash = $_SESSION['_user_agent_hash'] ?? null;
+    if (is_string($storedAgentHash) && !hash_equals($storedAgentHash, $expectedAgentHash)) {
+        clear_session();
+        session_start();
+        $created = $now;
+    }
+
     $_SESSION['_created_at'] = $created;
     $_SESSION['_last_activity'] = $now;
+    $_SESSION['_user_agent_hash'] = $expectedAgentHash;
+
+    $rotatedAt = (int) ($_SESSION['_rotated_at'] ?? $created);
+    if (($now - $rotatedAt) >= 900) {
+        session_regenerate_id(true);
+        $_SESSION['_rotated_at'] = $now;
+    } else {
+        $_SESSION['_rotated_at'] = $rotatedAt;
+    }
 }
 
 function clear_session(): void

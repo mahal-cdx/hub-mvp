@@ -25,6 +25,25 @@ function require_admin(): array
         redirect('/login');
     }
 
+    $statement = db()->prepare(
+        "SELECT 1
+         FROM usuarios u
+         INNER JOIN usuario_funcoes uf ON uf.usuario_id = u.id
+         INNER JOIN funcoes f ON f.id = uf.funcao_id
+         WHERE u.id = :id
+           AND u.uuid = :uuid
+           AND u.status = 'ativo'
+           AND f.chave = 'administrador'
+         LIMIT 1"
+    );
+    $statement->execute(['id' => $user['id'], 'uuid' => $user['uuid']]);
+
+    if ($statement->fetchColumn() === false) {
+        record_auth_audit('auth.sessao_revogada', $user['uuid']);
+        clear_session();
+        redirect('/login');
+    }
+
     return $user;
 }
 
