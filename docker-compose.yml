@@ -1,115 +1,121 @@
-name: ${PROJECT_SLUG:-sales}
+name: ${PROJECT_SLUG:-hub}
+
+x-app-environment: &app-environment
+  TZ: ${TZ:-America/Sao_Paulo}
+  APP_ENV: ${APP_ENV:-development}
+  APP_DEBUG: ${APP_DEBUG:-false}
+  APP_NAME: ${APP_NAME:-Threeebs Hub}
+  DB_HOST: mysql
+  DB_PORT: 3306
+  DB_DATABASE: ${MYSQL_DATABASE:-hub}
+  DB_USER: ${MYSQL_USER:-hub_app}
+  DB_PASSWORD: ${MYSQL_PASSWORD:?defina MYSQL_PASSWORD}
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_PASSWORD: ${REDIS_PASSWORD:?defina REDIS_PASSWORD}
+
+x-app-service: &app-service
+  build:
+    context: .
+    dockerfile: infrastructure/apache/Dockerfile
+  restart: unless-stopped
+  depends_on:
+    mysql:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  networks:
+    - hub
+  healthcheck:
+    test: ["CMD", "php", "-r", "exit(extension_loaded('pdo_mysql') ? 0 : 1);"]
+    interval: 15s
+    timeout: 5s
+    retries: 5
+    start_period: 20s
 
 services:
   admin:
-    image: php:8.3-apache-bookworm
-    container_name: ${PROJECT_SLUG:-sales}-admin
-    restart: unless-stopped
+    <<: *app-service
+    container_name: ${PROJECT_SLUG:-hub}-admin
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${ADMIN_PORT:-6021}:80"
+      - "${BIND_ADDRESS:-127.0.0.1}:${ADMIN_PORT:-6041}:80"
     environment:
-      TZ: ${TZ:-America/Sao_Paulo}
-      APP_ENV: ${APP_ENV:-development}
-      APP_DEBUG: ${APP_DEBUG:-true}
+      <<: *app-environment
       APP_CONTEXT: admin
-      APP_NAME: ${APP_NAME:-Sales Foundation} Admin
-      MYSQL_HOST: mysql
-      MYSQL_PORT: 3306
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-sales}
-      MYSQL_USER: ${MYSQL_USER:-sales_app}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change_me}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-change_me}
     volumes:
-      - ./apps/admin:/var/www/html
+      - ./apps/admin:/var/www/app
       - ./apps/shared:/var/www/shared:ro
+      - ./storage/uploads:/var/www/storage/uploads
       - ./storage/logs/admin:/var/log/apache2
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - sales
 
   users:
-    image: php:8.3-apache-bookworm
-    container_name: ${PROJECT_SLUG:-sales}-users
-    restart: unless-stopped
+    <<: *app-service
+    container_name: ${PROJECT_SLUG:-hub}-users
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${USERS_PORT:-6022}:80"
+      - "${BIND_ADDRESS:-127.0.0.1}:${USERS_PORT:-6042}:80"
     environment:
-      TZ: ${TZ:-America/Sao_Paulo}
-      APP_ENV: ${APP_ENV:-development}
-      APP_DEBUG: ${APP_DEBUG:-true}
+      <<: *app-environment
       APP_CONTEXT: users
-      APP_NAME: ${APP_NAME:-Sales Foundation} Users
-      MYSQL_HOST: mysql
-      MYSQL_PORT: 3306
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-sales}
-      MYSQL_USER: ${MYSQL_USER:-sales_app}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change_me}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-change_me}
     volumes:
-      - ./apps/users:/var/www/html
+      - ./apps/users:/var/www/app
       - ./apps/shared:/var/www/shared:ro
+      - ./storage/uploads:/var/www/storage/uploads
       - ./storage/logs/users:/var/log/apache2
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - sales
 
   mysql:
     image: mysql:8.4
-    container_name: ${PROJECT_SLUG:-sales}-mysql
+    container_name: ${PROJECT_SLUG:-hub}-mysql
     restart: unless-stopped
     environment:
       TZ: ${TZ:-America/Sao_Paulo}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-sales}
-      MYSQL_USER: ${MYSQL_USER:-sales_app}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      APP_ENV: ${APP_ENV:-development}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?defina MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-hub}
+      MYSQL_USER: ${MYSQL_USER:-hub_app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?defina MYSQL_PASSWORD}
+      LOAD_DEMO_SEEDS: ${LOAD_DEMO_SEEDS:-false}
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${MYSQL_PORT:-6023}:3306"
+      - "${DB_BIND_ADDRESS:-127.0.0.1}:${MYSQL_PORT:-6043}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./database/migrations:/docker-entrypoint-initdb.d/01-migrations:ro
-      - ./database/seeds:/docker-entrypoint-initdb.d/02-seeds:ro
+      - ./database:/opt/hub/database:ro
+      - ./infrastructure/mysql/init/001_initialize.sh:/docker-entrypoint-initdb.d/001_initialize.sh:ro
     networks:
-      - sales
+      - hub
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -h 127.0.0.1 -uroot --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
 
   redis:
     image: redis:8-alpine
-    container_name: ${PROJECT_SLUG:-sales}-redis
+    container_name: ${PROJECT_SLUG:-hub}-redis
     restart: unless-stopped
-    ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${REDIS_PORT:-6024}:6379"
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-change_me}
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-change_me}"]
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?defina REDIS_PASSWORD}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?defina REDIS_PASSWORD}"]
+    ports:
+      - "${REDIS_BIND_ADDRESS:-127.0.0.1}:${REDIS_PORT:-6044}:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - hub
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a "$${REDIS_PASSWORD}" ping | grep PONG"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping 2>/dev/null | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 10
-    networks:
-      - sales
+      start_period: 10s
 
 volumes:
   mysql_data:
-    name: ${PROJECT_SLUG:-sales}-mysql-data
+    name: ${PROJECT_SLUG:-hub}-mysql-data
   redis_data:
-    name: ${PROJECT_SLUG:-sales}-redis-data
+    name: ${PROJECT_SLUG:-hub}-redis-data
 
 networks:
-  sales:
-    name: ${PROJECT_SLUG:-sales}-network
+  hub:
+    name: ${PROJECT_SLUG:-hub}-network
     driver: bridge
