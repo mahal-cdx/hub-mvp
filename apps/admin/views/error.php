@@ -1,0 +1,6 @@
+<section class="error-card">
+  <p class="eyebrow">Não foi possível continuar</p>
+  <h1><?= e($title ?? 'Erro') ?></h1>
+  <p><?= e($message) ?></p>
+  <a class="button button-primary" href="<?= auth_check() ? '/' : '/login' ?>">Voltar</a>
+</section>

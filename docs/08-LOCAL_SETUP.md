@@ -2,64 +2,56 @@
 
 ## Requisitos
 
-- Docker
-- Docker Compose
-- Git
+- Docker com Compose v2;
+- portas 6041 a 6044 disponíveis, ou valores alternativos no `.env`;
+- volume descartável durante o rework das migrations.
 
-## Preparação
+## Configuração
 
-```bash
+~~~bash
 cp .env.example .env
-```
+~~~
 
-Edite as senhas do `.env`.
+Troque todas as senhas. Para criar os usuários e regras de teste, defina `LOAD_DEMO_SEEDS=true`. Mantenha `false` em qualquer ambiente real.
 
-## Subir a infraestrutura
+## Primeira inicialização
 
-```bash
+~~~bash
+docker compose config
+docker compose build
 docker compose up -d
-```
-
-Verificar:
-
-```bash
 docker compose ps
-```
+~~~
 
-Logs:
+Na criação do volume MySQL, o script de inicialização aplica migrations em ordem e carrega seeds somente quando autorizado.
 
-```bash
-docker compose logs -f admin
-docker compose logs -f users
-```
+## Atualizar um banco existente
 
-## Portas padrão
+~~~bash
+bash scripts/migrate.sh
+~~~
 
-| Serviço | Porta |
-|---|---:|
-| Admin PHP | 6021 |
-| Users PHP | 6022 |
-| MySQL | 6023 |
-| Redis | 6024 |
+O runner consulta `schema_migrations` e ignora arquivos já aplicados. Uma migration aplicada nunca deve ser editada após uso compartilhado; crie um novo arquivo numerado.
 
-As portas podem ser alteradas no `.env`.
+Para carregar manualmente as fixtures em ambiente descartável:
 
-## Estado esperado
+~~~bash
+bash scripts/seed-demo.sh
+~~~
 
-Neste primeiro pacote, as aplicações PHP estão vazias propositalmente.
+## Serviços
 
-A infraestrutura existe para que a próxima etapa possa começar pela implementação da fundação de banco, autenticação e contratos do domínio.
+| Serviço | Porta padrão | Exposição padrão |
+| --- | ---: | --- |
+| Admin | 6041 | todas as interfaces |
+| Users | 6042 | todas as interfaces |
+| MySQL | 6043 | somente localhost |
+| Redis | 6044 | somente localhost |
 
-## Segurança
+## Contas da fixture
 
-Não versione:
+Quando os seeds estiverem habilitados, são criadas contas locais de Administrador, Captador, Desenvolvedor e Comercial. A senha inicial é `123456`. Elas não podem ser usadas em produção.
 
-```text
-.env
-storage/
-credenciais
-tokens
-senhas
-```
+## Observações
 
-Em ambiente público, não exponha MySQL e Redis sem uma necessidade operacional clara.
+As aplicações PHP ainda não foram implementadas. Os healthchecks dos containers PHP verificam o runtime e a extensão PDO MySQL; eles não representam um teste funcional das futuras telas.
