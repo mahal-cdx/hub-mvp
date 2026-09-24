@@ -24,6 +24,7 @@ $currentPath = route_path();
     <?php if (user_has_role($user, 'captador')): ?><a class="<?= str_starts_with($currentPath, '/leads') ? 'active' : '' ?>" href="/leads">Leads</a><?php endif; ?>
     <?php if (user_has_role($user, 'desenvolvedor')): ?><a class="<?= str_starts_with($currentPath, '/dev') ? 'active' : '' ?>" href="/dev">Desenvolvimento</a><?php endif; ?>
     <?php if (user_has_role($user, 'comercial')): ?><a class="<?= str_starts_with($currentPath, '/sales') ? 'active' : '' ?>" href="/sales">Vendas</a><?php endif; ?>
+    <a class="<?= str_starts_with($currentPath, '/wallet') ? 'active' : '' ?>" href="/wallet">Pontos e saques</a>
   </nav>
   <div class="user-menu"><span><strong><?= e($user['name']) ?></strong><small><?= e(implode(' · ', $user['roles'])) ?></small></span><form method="post" action="/logout"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><button class="button button-secondary" type="submit">Sair</button></form></div>
 </header>
