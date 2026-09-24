@@ -1,62 +1,51 @@
-# 06 — Modelo de dados inicial
+# 06 — Modelo de dados
 
-O modelo deve começar simples e preparado para API.
+## Identidade e autorização
 
-Entidades principais:
+- `usuarios`
+- `funcoes`
+- `usuario_funcoes`
 
-```text
-usuarios
-usuario_funcoes
+`usuarios` deve aceitar identidade local e vínculo opcional com um UUID verificado do Edge. Credenciais externas não são copiadas.
 
-leads
-oportunidades
+## Captação e produção
 
-projetos
-vendas
-pagamentos
+- `leads`
+- `lead_contatos`
+- `lead_revisoes_completude`
+- `oportunidades`
+- `projetos`
+- `projeto_revisoes`
 
-regras_pontuacao
-eventos_pontuacao
+Contatos são normalizados por tipo. Revisões de completude guardam regra, campos considerados e autor. Assunção de oportunidade registra responsável e horário.
 
-carteiras
-lancamentos_carteira
-solicitacoes_saque
+## Comercial e pagamento
 
-auditoria
-```
+- `ofertas`
+- `vendas`
+- `interacoes_comerciais`
+- `pagamentos`
+- `pagamento_eventos`
+
+Projeto, oferta, venda e pagamento têm ciclos independentes. Eventos externos usam referência e chave idempotente obrigatórias. Estornos são novos eventos.
+
+## Pontos e saques
+
+- `regras_pontuacao`
+- `eventos_pontuacao`
+- `lancamentos_pontos`
+- `cotacoes_ponto`
+- `solicitacoes_saque`
+- `saque_eventos`
+
+A carteira é apurada pelo extrato. Solicitações guardam os pontos reservados e a cotação usada.
+
+## Histórico
+
+- `eventos_auditoria`
+
+A auditoria registra ator, origem, ação, entidade, request ID, estado anterior e posterior quando apropriado. Segredos, tokens e dados sensíveis completos não entram no log.
 
 ## Identificadores
 
-Entidades de domínio devem utilizar UUID.
-
-Referências futuras ao Threeebs devem utilizar identificadores externos, por exemplo:
-
-```text
-usuario_uuid
-cliente_uuid
-projeto_uuid
-```
-
-## Pagamento
-
-O pagamento deve guardar pelo menos:
-
-- UUID interno;
-- projeto;
-- venda;
-- valor;
-- provedor;
-- identificador externo;
-- URL de pagamento;
-- status;
-- data de confirmação.
-
-## Regra financeira
-
-O lançamento de pontos deve guardar o valor monetário aplicado no momento do evento.
-
-Isso cria um histórico imutável para auditoria.
-
-## Não implementar ainda
-
-Não antecipar tabelas complexas de integração do Threeebs antes de definir o contrato da futura API.
+Entidades públicas usam UUID canônico. IDs numéricos internos podem existir para desempenho. Referências entre bancos ou serviços usam UUID sem foreign key cruzada. Vínculos opcionais com Edge incluem origem e data de sincronização.
