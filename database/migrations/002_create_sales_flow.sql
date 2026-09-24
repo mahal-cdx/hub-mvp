@@ -1,121 +1,241 @@
 CREATE TABLE IF NOT EXISTS leads (
-    uuid CHAR(36) NOT NULL,
-    nome VARCHAR(160) NOT NULL,
-    email VARCHAR(190) NULL,
-    whatsapp VARCHAR(30) NULL,
-    instagram VARCHAR(120) NULL,
-    tiktok VARCHAR(120) NULL,
-    youtube VARCHAR(190) NULL,
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    uuid CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    captador_usuario_id BIGINT UNSIGNED NOT NULL,
+    nome VARCHAR(160) NULL,
     bio TEXT NULL,
-    link_bio VARCHAR(500) NULL,
     logo_url VARCHAR(500) NULL,
     imagem_url VARCHAR(500) NULL,
-    referencias TEXT NULL,
+    referencias JSON NULL,
     observacoes TEXT NULL,
     origem VARCHAR(80) NULL,
-    status ENUM('novo','em_analise','oportunidade','descartado') NOT NULL DEFAULT 'novo',
-    temperatura ENUM('frio','morno','quente') NOT NULL DEFAULT 'frio',
-    captador_uuid CHAR(36) NULL,
+    status VARCHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'novo',
+    temperatura VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'frio',
+    qualificado_em DATETIME(6) NULL,
+    descartado_em DATETIME(6) NULL,
+    descarte_motivo VARCHAR(255) NULL,
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-    PRIMARY KEY (uuid),
-    KEY idx_leads_status (status),
-    KEY idx_leads_captador (captador_uuid),
-    CONSTRAINT fk_leads_captador
-        FOREIGN KEY (captador_uuid) REFERENCES usuarios (uuid)
-        ON DELETE SET NULL
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_leads_uuid (uuid),
+    KEY idx_leads_status_created (status, created_at),
+    KEY idx_leads_captador_created (captador_usuario_id, created_at),
+    CONSTRAINT fk_leads_captador FOREIGN KEY (captador_usuario_id) REFERENCES usuarios (id) ON DELETE RESTRICT,
+    CONSTRAINT chk_leads_status CHECK (status IN ('novo','em_analise','qualificado','descartado')),
+    CONSTRAINT chk_leads_temperatura CHECK (temperatura IN ('frio','morno','quente'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS lead_contatos (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    uuid CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    lead_id BIGINT UNSIGNED NOT NULL,
+    tipo VARCHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    valor VARCHAR(500) NOT NULL,
+    valor_normalizado VARCHAR(500) NOT NULL,
+    principal TINYINT(1) NOT NULL DEFAULT 0,
+    origem VARCHAR(80) NULL,
+    consentimento TINYINT(1) NULL,
+    criado_por_usuario_id BIGINT UNSIGNED NOT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_lead_contatos_uuid (uuid),
+    UNIQUE KEY uq_lead_contatos_valor (lead_id, tipo, valor_normalizado),
+    KEY idx_lead_contatos_lead (lead_id),
+    CONSTRAINT fk_lead_contatos_lead FOREIGN KEY (lead_id) REFERENCES leads (id) ON DELETE CASCADE,
+    CONSTRAINT fk_lead_contatos_criador FOREIGN KEY (criado_por_usuario_id) REFERENCES usuarios (id) ON DELETE RESTRICT,
+    CONSTRAINT chk_lead_contatos_tipo CHECK (tipo IN ('email','whatsapp','instagram','tiktok','youtube','site','outro'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS lead_completude_revisoes (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    uuid CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    lead_id BIGINT UNSIGNED NOT NULL,
+    autor_usuario_id BIGINT UNSIGNED NOT NULL,
+    regra_versao SMALLINT UNSIGNED NOT NULL,
+    percentual DECIMAL(5,2) NOT NULL,
+    pontos_elegiveis INT UNSIGNED NOT NULL DEFAULT 0,
+    campos_considerados JSON NOT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_lead_completude_uuid (uuid),
+    KEY idx_lead_completude_lead_data (lead_id, created_at),
+    CONSTRAINT fk_lead_completude_lead FOREIGN KEY (lead_id) REFERENCES leads (id) ON DELETE CASCADE,
+    CONSTRAINT fk_lead_completude_autor FOREIGN KEY (autor_usuario_id) REFERENCES usuarios (id) ON DELETE RESTRICT,
+    CONSTRAINT chk_lead_completude_percentual CHECK (percentual >= 0 AND percentual <= 100)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS oportunidades (
-    uuid CHAR(36) NOT NULL,
-    lead_uuid CHAR(36) NOT NULL,
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    uuid CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    lead_id BIGINT UNSIGNED NOT NULL,
     titulo VARCHAR(180) NOT NULL,
     descricao TEXT NULL,
-    status ENUM('aberta','em_desenvolvimento','projeto_pronto','aprovada','em_venda','convertida','perdida') NOT NULL DEFAULT 'aberta',
-    valor_estimado_brl DECIMAL(12,2) NULL,
-    captador_uuid CHAR(36) NULL,
-    desenvolvedor_uuid CHAR(36) NULL,
+    status VARCHAR(40) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'aberta',
+    desenvolvedor_usuario_id BIGINT UNSIGNED NULL,
+    assumida_em DATETIME(6) NULL,
+    encerrada_em DATETIME(6) NULL,
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-    PRIMARY KEY (uuid),
-    KEY idx_oportunidades_lead (lead_uuid),
-    KEY idx_oportunidades_status (status),
-    CONSTRAINT fk_oportunidades_lead
-        FOREIGN KEY (lead_uuid) REFERENCES leads (uuid)
-        ON DELETE RESTRICT,
-    CONSTRAINT fk_oportunidades_captador
-        FOREIGN KEY (captador_uuid) REFERENCES usuarios (uuid)
-        ON DELETE SET NULL,
-    CONSTRAINT fk_oportunidades_desenvolvedor
-        FOREIGN KEY (desenvolvedor_uuid) REFERENCES usuarios (uuid)
-        ON DELETE SET NULL
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_oportunidades_uuid (uuid),
+    UNIQUE KEY uq_oportunidades_lead (lead_id),
+    KEY idx_oportunidades_status_created (status, created_at),
+    KEY idx_oportunidades_dev_status (desenvolvedor_usuario_id, status),
+    CONSTRAINT fk_oportunidades_lead FOREIGN KEY (lead_id) REFERENCES leads (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_oportunidades_dev FOREIGN KEY (desenvolvedor_usuario_id) REFERENCES usuarios (id) ON DELETE SET NULL,
+    CONSTRAINT chk_oportunidades_status CHECK (status IN ('aberta','assumida','em_desenvolvimento','em_revisao','ajustes','aprovada','em_venda','vendida','perdida','cancelada'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS projetos (
-    uuid CHAR(36) NOT NULL,
-    oportunidade_uuid CHAR(36) NOT NULL,
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    uuid CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    oportunidade_id BIGINT UNSIGNED NOT NULL,
+    desenvolvedor_usuario_id BIGINT UNSIGNED NOT NULL,
     nome VARCHAR(180) NOT NULL,
     descricao TEXT NULL,
     url_preview VARCHAR(500) NULL,
     url_producao VARCHAR(500) NULL,
-    status ENUM('rascunho','enviado_aprovacao','ajustes','aprovado','reprovado') NOT NULL DEFAULT 'rascunho',
-    desenvolvedor_uuid CHAR(36) NULL,
-    aprovado_por_uuid CHAR(36) NULL,
+    status VARCHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'rascunho',
+    aprovado_por_usuario_id BIGINT UNSIGNED NULL,
     aprovado_em DATETIME(6) NULL,
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-    PRIMARY KEY (uuid),
-    KEY idx_projetos_oportunidade (oportunidade_uuid),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_projetos_uuid (uuid),
+    UNIQUE KEY uq_projetos_oportunidade (oportunidade_id),
     KEY idx_projetos_status (status),
-    CONSTRAINT fk_projetos_oportunidade
-        FOREIGN KEY (oportunidade_uuid) REFERENCES oportunidades (uuid)
-        ON DELETE RESTRICT,
-    CONSTRAINT fk_projetos_desenvolvedor
-        FOREIGN KEY (desenvolvedor_uuid) REFERENCES usuarios (uuid)
-        ON DELETE SET NULL,
-    CONSTRAINT fk_projetos_aprovador
-        FOREIGN KEY (aprovado_por_uuid) REFERENCES usuarios (uuid)
-        ON DELETE SET NULL
+    CONSTRAINT fk_projetos_oportunidade FOREIGN KEY (oportunidade_id) REFERENCES oportunidades (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_projetos_dev FOREIGN KEY (desenvolvedor_usuario_id) REFERENCES usuarios (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_projetos_aprovador FOREIGN KEY (aprovado_por_usuario_id) REFERENCES usuarios (id) ON DELETE SET NULL,
+    CONSTRAINT chk_projetos_status CHECK (status IN ('rascunho','em_revisao','ajustes','aprovado','reprovado','arquivado'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS projeto_revisoes (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    uuid CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    projeto_id BIGINT UNSIGNED NOT NULL,
+    revisor_usuario_id BIGINT UNSIGNED NULL,
+    submissao_numero SMALLINT UNSIGNED NOT NULL,
+    decisao VARCHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'pendente',
+    observacoes TEXT NULL,
+    url_preview_snapshot VARCHAR(500) NULL,
+    submetido_em DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    decidido_em DATETIME(6) NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_projeto_revisoes_uuid (uuid),
+    UNIQUE KEY uq_projeto_revisoes_submissao (projeto_id, submissao_numero),
+    KEY idx_projeto_revisoes_decisao_data (decisao, submetido_em),
+    CONSTRAINT fk_projeto_revisoes_projeto FOREIGN KEY (projeto_id) REFERENCES projetos (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_projeto_revisoes_revisor FOREIGN KEY (revisor_usuario_id) REFERENCES usuarios (id) ON DELETE SET NULL,
+    CONSTRAINT chk_projeto_revisoes_decisao CHECK (decisao IN ('pendente','ajustes','aprovado','reprovado'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS ofertas (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    uuid CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    projeto_id BIGINT UNSIGNED NOT NULL,
+    criado_por_usuario_id BIGINT UNSIGNED NOT NULL,
+    valor_brl DECIMAL(12,2) NOT NULL,
+    provedor_pagamento VARCHAR(50) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'mercado_pago',
+    referencia_externa VARCHAR(190) NULL,
+    link_pagamento VARCHAR(1000) NOT NULL,
+    status VARCHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'ativa',
+    vigente_desde DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    vigente_ate DATETIME(6) NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_ofertas_uuid (uuid),
+    UNIQUE KEY uq_ofertas_provedor_referencia (provedor_pagamento, referencia_externa),
+    KEY idx_ofertas_projeto_status (projeto_id, status),
+    CONSTRAINT fk_ofertas_projeto FOREIGN KEY (projeto_id) REFERENCES projetos (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_ofertas_criador FOREIGN KEY (criado_por_usuario_id) REFERENCES usuarios (id) ON DELETE RESTRICT,
+    CONSTRAINT chk_ofertas_valor CHECK (valor_brl > 0),
+    CONSTRAINT chk_ofertas_status CHECK (status IN ('ativa','inativa','expirada','cancelada'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS vendas (
-    uuid CHAR(36) NOT NULL,
-    projeto_uuid CHAR(36) NOT NULL,
-    comercial_uuid CHAR(36) NULL,
-    cliente_nome VARCHAR(160) NOT NULL,
-    cliente_email VARCHAR(190) NULL,
-    valor_brl DECIMAL(12,2) NOT NULL,
-    status ENUM('aberta','link_gerado','aguardando_pagamento','paga','cancelada') NOT NULL DEFAULT 'aberta',
-    criado_em DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-    atualizada_em DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-    PRIMARY KEY (uuid),
-    KEY idx_vendas_projeto (projeto_uuid),
-    KEY idx_vendas_comercial (comercial_uuid),
-    KEY idx_vendas_status (status),
-    CONSTRAINT fk_vendas_projeto
-        FOREIGN KEY (projeto_uuid) REFERENCES projetos (uuid)
-        ON DELETE RESTRICT,
-    CONSTRAINT fk_vendas_comercial
-        FOREIGN KEY (comercial_uuid) REFERENCES usuarios (uuid)
-        ON DELETE SET NULL
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    uuid CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    oferta_id BIGINT UNSIGNED NOT NULL,
+    comercial_usuario_id BIGINT UNSIGNED NULL,
+    status VARCHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'disponivel',
+    assumida_em DATETIME(6) NULL,
+    fechada_em DATETIME(6) NULL,
+    perdida_em DATETIME(6) NULL,
+    perda_motivo VARCHAR(255) NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_vendas_uuid (uuid),
+    UNIQUE KEY uq_vendas_oferta (oferta_id),
+    KEY idx_vendas_status_created (status, created_at),
+    KEY idx_vendas_comercial_status (comercial_usuario_id, status),
+    CONSTRAINT fk_vendas_oferta FOREIGN KEY (oferta_id) REFERENCES ofertas (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_vendas_comercial FOREIGN KEY (comercial_usuario_id) REFERENCES usuarios (id) ON DELETE SET NULL,
+    CONSTRAINT chk_vendas_status CHECK (status IN ('disponivel','em_atendimento','aguardando_pagamento','fechada','perdida','cancelada'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS interacoes_comerciais (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    uuid CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    venda_id BIGINT UNSIGNED NOT NULL,
+    comercial_usuario_id BIGINT UNSIGNED NOT NULL,
+    canal VARCHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    resultado VARCHAR(50) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    observacoes TEXT NULL,
+    proximo_contato_em DATETIME(6) NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_interacoes_comerciais_uuid (uuid),
+    KEY idx_interacoes_venda_data (venda_id, created_at),
+    KEY idx_interacoes_proximo_contato (proximo_contato_em),
+    CONSTRAINT fk_interacoes_venda FOREIGN KEY (venda_id) REFERENCES vendas (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_interacoes_comercial FOREIGN KEY (comercial_usuario_id) REFERENCES usuarios (id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS pagamentos (
-    uuid CHAR(36) NOT NULL,
-    venda_uuid CHAR(36) NOT NULL,
-    provedor VARCHAR(50) NOT NULL DEFAULT 'manual',
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    uuid CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    venda_id BIGINT UNSIGNED NOT NULL,
+    provedor VARCHAR(50) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     referencia_externa VARCHAR(190) NULL,
-    link_pagamento VARCHAR(500) NULL,
+    idempotency_key VARCHAR(190) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     valor_brl DECIMAL(12,2) NOT NULL,
-    status ENUM('pendente','aprovado','recusado','cancelado') NOT NULL DEFAULT 'pendente',
-    pago_em DATETIME(6) NULL,
+    status VARCHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'pendente',
+    confirmado_por_usuario_id BIGINT UNSIGNED NULL,
+    confirmado_em DATETIME(6) NULL,
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-    PRIMARY KEY (uuid),
-    UNIQUE KEY uq_pagamentos_referencia (provedor, referencia_externa),
-    KEY idx_pagamentos_venda (venda_uuid),
-    KEY idx_pagamentos_status (status),
-    CONSTRAINT fk_pagamentos_venda
-        FOREIGN KEY (venda_uuid) REFERENCES vendas (uuid)
-        ON DELETE RESTRICT
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_pagamentos_uuid (uuid),
+    UNIQUE KEY uq_pagamentos_idempotency (idempotency_key),
+    UNIQUE KEY uq_pagamentos_provedor_referencia (provedor, referencia_externa),
+    KEY idx_pagamentos_venda_status (venda_id, status),
+    CONSTRAINT fk_pagamentos_venda FOREIGN KEY (venda_id) REFERENCES vendas (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_pagamentos_confirmador FOREIGN KEY (confirmado_por_usuario_id) REFERENCES usuarios (id) ON DELETE SET NULL,
+    CONSTRAINT chk_pagamentos_valor CHECK (valor_brl > 0),
+    CONSTRAINT chk_pagamentos_status CHECK (status IN ('pendente','aprovado','recusado','cancelado','estornado'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS pagamento_eventos (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    uuid CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    pagamento_id BIGINT UNSIGNED NOT NULL,
+    ator_usuario_id BIGINT UNSIGNED NULL,
+    tipo VARCHAR(50) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    idempotency_key VARCHAR(190) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    referencia_externa VARCHAR(190) NULL,
+    dados JSON NULL,
+    ocorrido_em DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_pagamento_eventos_uuid (uuid),
+    UNIQUE KEY uq_pagamento_eventos_idempotency (idempotency_key),
+    KEY idx_pagamento_eventos_pagamento_data (pagamento_id, ocorrido_em),
+    CONSTRAINT fk_pagamento_eventos_pagamento FOREIGN KEY (pagamento_id) REFERENCES pagamentos (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_pagamento_eventos_ator FOREIGN KEY (ator_usuario_id) REFERENCES usuarios (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+INSERT INTO schema_migrations (migration, checksum)
+VALUES ('002_create_sales_flow.sql', SHA2('002_create_sales_flow.sql:v2', 256))
+ON DUPLICATE KEY UPDATE migration = VALUES(migration);
