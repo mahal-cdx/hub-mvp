@@ -339,3 +339,45 @@ code{color:var(--text);font-family:ui-monospace,SFMono-Regular,Consolas,monospac
   .page-head{align-items:stretch;flex-direction:column}
   .page-head-actions,.page-head-actions .button{width:100%}
 }
+
+
+/* Operação: desenvolvimento e comercial */
+.status-line{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap}
+.temperature{display:inline-flex;border-radius:99px;padding:.24rem .52rem;font-size:.72rem;font-weight:800;text-transform:capitalize}
+.temperature-frio{color:#aeeeff;background:rgba(94,207,255,.09);border:1px solid rgba(94,207,255,.28)}
+.temperature-morno{color:#ffe39b;background:rgba(255,208,94,.09);border:1px solid rgba(255,208,94,.3)}
+.temperature-quente{color:#ffb8b8;background:rgba(255,99,99,.09);border:1px solid rgba(255,99,99,.32)}
+.accordion-list{gap:.8rem}
+.accordion-card{border:1px solid var(--border)!important;border-radius:1rem;background:rgba(255,255,255,.018);overflow:hidden}
+.accordion-card>summary{padding:1rem!important}
+.developer-project-flow{display:grid!important;grid-template-columns:1fr!important;gap:1rem;padding:1rem}
+.developer-briefing,.developer-delivery{width:100%;min-width:0;min-height:0!important}
+.developer-briefing{display:grid;gap:1rem}
+.developer-delivery{margin:0}
+.deadline-banner,.scheduled-banner{display:flex;justify-content:space-between;gap:1rem;align-items:center;border:1px solid rgba(255,208,94,.35);border-radius:.85rem;padding:.8rem 1rem;background:rgba(255,208,94,.07);color:#ffe39b}
+.deadline-banner span,.scheduled-banner span{color:var(--muted);font-size:.82rem}
+.developer-reference-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:.8rem;margin-top:.7rem}
+.developer-reference{display:grid;grid-template-columns:5.2rem minmax(0,1fr);gap:.7rem;align-items:center}
+.developer-reference img{grid-row:1 / span 2;width:5.2rem;height:5.2rem;aspect-ratio:1;object-fit:cover}
+.developer-reference .actions{grid-column:2;display:flex;gap:.45rem}
+.scheduled-summary{color:#ffe39b;font-size:.75rem;font-weight:700}
+.status-retorno_agendado{color:#ffe39b;border-color:rgba(255,208,94,.35)}
+.status-aguardando_pagamento{color:#d7bbff;border-color:rgba(174,116,255,.35)}
+.sales-body{display:grid!important;grid-template-columns:1fr!important;gap:1rem}
+.sales-body .lead-access-card,.sales-body .editor-panel{width:100%;min-width:0}
+.extras-fieldset{margin:0;border:1px solid var(--border);border-radius:.85rem;padding:1rem}
+.extras-fieldset legend{padding:0 .4rem;font-weight:800}
+.extras-fieldset>p{margin:.2rem 0 .8rem;color:var(--muted);font-size:.82rem}
+.extras-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:.6rem}
+.extra-option{display:flex;gap:.65rem;align-items:flex-start;border:1px solid var(--border);border-radius:.75rem;padding:.7rem;background:rgba(255,255,255,.02);cursor:pointer}
+.extra-option:has(input:checked){border-color:rgba(111,255,205,.45);background:rgba(111,255,205,.07)}
+.extra-option input{margin-top:.2rem;accent-color:var(--accent)}
+.extra-option span{display:grid}
+.extra-option small{margin-top:.2rem;color:var(--muted);font-size:.73rem}
+@media(max-width:650px){
+  .deadline-banner,.scheduled-banner{align-items:flex-start;flex-direction:column}
+  .developer-reference-grid{grid-template-columns:1fr}
+  .developer-reference{grid-template-columns:4.5rem minmax(0,1fr)}
+  .developer-reference img{width:4.5rem;height:4.5rem}
+  .developer-reference .actions{grid-column:1 / -1}
+}

@@ -202,7 +202,7 @@ if ($method === 'GET' && $path === '/sales') {
     if (!user_has_role($user, 'comercial')) {
         render_error(403, 'Seu usuário não possui a função comercial.');
     }
-    render('sales', ['title' => 'Vendas', 'user' => $user, 'sales' => list_commercial_sales((int) $user['id']), 'error' => null, 'success' => isset($_GET['saved'])]);
+    render('sales', ['title' => 'Vendas', 'user' => $user, 'sales' => list_commercial_sales((int) $user['id']), 'extraProducts' => list_active_extra_products(), 'error' => null, 'success' => isset($_GET['saved'])]);
 }
 
 if ($method === 'POST' && $path === '/sales/claim') {
@@ -215,7 +215,7 @@ if ($method === 'POST' && $path === '/sales/claim') {
         claim_sale((string) ($_POST['sale_uuid'] ?? ''), $user);
         redirect('/sales?saved=1');
     } catch (InvalidArgumentException $error) {
-        render('sales', ['title' => 'Vendas', 'user' => $user, 'sales' => list_commercial_sales((int) $user['id']), 'error' => $error->getMessage(), 'success' => false], 422);
+        render('sales', ['title' => 'Vendas', 'user' => $user, 'sales' => list_commercial_sales((int) $user['id']), 'extraProducts' => list_active_extra_products(), 'error' => $error->getMessage(), 'success' => false], 422);
     }
 }
 
@@ -229,7 +229,7 @@ if ($method === 'POST' && $path === '/sales/contact') {
         record_sale_interaction($_POST, $user);
         redirect('/sales?saved=1');
     } catch (InvalidArgumentException $error) {
-        render('sales', ['title' => 'Vendas', 'user' => $user, 'sales' => list_commercial_sales((int) $user['id']), 'error' => $error->getMessage(), 'success' => false], 422);
+        render('sales', ['title' => 'Vendas', 'user' => $user, 'sales' => list_commercial_sales((int) $user['id']), 'extraProducts' => list_active_extra_products(), 'error' => $error->getMessage(), 'success' => false], 422);
     }
 }
 

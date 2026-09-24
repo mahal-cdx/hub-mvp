@@ -214,3 +214,17 @@ document.querySelectorAll('[data-copy-image]').forEach((button) => {
     }
   });
 });
+
+
+document.querySelectorAll('form[action="/sales/contact"]').forEach((form) => {
+  const result = form.querySelector('select[name="result"]');
+  const nextContact = form.querySelector('input[name="next_contact_at"]');
+  const syncRequired = () => {
+    if (!result || !nextContact) return;
+    const scheduled = result.value === 'retorno_agendado';
+    nextContact.required = scheduled;
+    nextContact.closest('.field')?.classList.toggle('field-required', scheduled);
+  };
+  result?.addEventListener('change', syncRequired);
+  syncRequired();
+});

@@ -217,6 +217,11 @@ function create_lead(array $input, array $actor, array $uploadBag = []): string
     $connection->beginTransaction();
 
     try {
+        if (count_captor_pipeline_stage($connection, (int) $actor['id'], 'queue')
+            >= operational_limit('captador_na_fila', $connection)) {
+            throw new InvalidArgumentException('Você atingiu o limite de leads na fila.');
+        }
+
         $lead = $connection->prepare(
             "INSERT INTO leads
                 (uuid, captador_usuario_id, nome, bio, bio_url, observacoes, origem, status, temperatura, qualificado_em)
@@ -334,19 +339,21 @@ function update_lead(array $input, array $actor, array $uploadBag = []): void
 
 function list_developer_work(int $userId): array
 {
-    // Oportunidades abertas retornam somente metadados operacionais.
-    // Dados do lead são liberados apenas depois da atribuição atômica.
+    release_expired_developer_assignments();
+
     $open = db()->query(
-        "SELECT o.uuid, o.created_at
+        "SELECT o.uuid, o.created_at, l.temperatura
          FROM oportunidades o
+         INNER JOIN leads l ON l.id = o.lead_id
          WHERE o.status = 'aberta' AND o.desenvolvedor_usuario_id IS NULL
-         ORDER BY o.created_at
+         ORDER BY FIELD(l.temperatura, 'quente', 'morno', 'frio'), o.created_at
          LIMIT 50"
     )->fetchAll();
 
     $mineStatement = db()->prepare(
         "SELECT o.uuid, o.titulo, o.descricao oportunidade_descricao, o.status, o.assumida_em,
-                l.id lead_id, l.nome lead_nome, l.bio, l.bio_url, l.referencias, l.observacoes,
+                o.prazo_desenvolvimento_em,
+                l.id lead_id, l.nome lead_nome, l.bio, l.bio_url, l.referencias, l.observacoes, l.temperatura,
                 p.uuid projeto_uuid, p.nome projeto_nome, p.descricao projeto_descricao,
                 p.url_preview, p.status projeto_status,
                 GROUP_CONCAT(CONCAT(lc.tipo, ': ', lc.valor) ORDER BY lc.tipo SEPARATOR ' | ') contatos
@@ -359,10 +366,11 @@ function list_developer_work(int $userId): array
           AND p.status <> 'arquivado'
          WHERE o.desenvolvedor_usuario_id = :user_id
            AND o.status NOT IN ('vendida','perdida','cancelada')
-         GROUP BY o.id, o.uuid, o.titulo, o.descricao, o.status, o.assumida_em,
-                  l.id, l.nome, l.bio, l.bio_url, l.referencias, l.observacoes,
+         GROUP BY o.id, o.uuid, o.titulo, o.descricao, o.status, o.assumida_em, o.prazo_desenvolvimento_em,
+                  l.id, l.nome, l.bio, l.bio_url, l.referencias, l.observacoes, l.temperatura,
                   p.uuid, p.nome, p.descricao, p.url_preview, p.status
-         ORDER BY o.updated_at DESC"
+         ORDER BY FIELD(o.status, 'ajustes', 'assumida', 'em_desenvolvimento', 'em_revisao', 'aprovada', 'em_venda'),
+                  o.updated_at DESC"
     );
     $mineStatement->execute(['user_id' => $userId]);
     $mine = $mineStatement->fetchAll();
@@ -374,21 +382,55 @@ function list_developer_work(int $userId): array
 
     return ['open' => $open, 'mine' => $mine];
 }
+
 function claim_opportunity(string $uuid, array $actor): void
 {
+    release_expired_developer_assignments();
     $connection = db();
     $connection->beginTransaction();
     try {
+        if (count_user_status(
+            $connection,
+            'oportunidades',
+            (int) $actor['id'],
+            'desenvolvedor_usuario_id',
+            ['assumida','em_desenvolvimento','ajustes']
+        ) >= operational_limit('dev_assumida', $connection)) {
+            throw new InvalidArgumentException('Conclua seu projeto ativo antes de assumir outro.');
+        }
+
+        $target = $connection->prepare(
+            "SELECT o.id, l.captador_usuario_id
+             FROM oportunidades o
+             INNER JOIN leads l ON l.id = o.lead_id
+             WHERE o.uuid = :uuid AND o.desenvolvedor_usuario_id IS NULL AND o.status = 'aberta'
+             FOR UPDATE"
+        );
+        $target->execute(['uuid' => $uuid]);
+        $opportunity = $target->fetch();
+        if (!is_array($opportunity)) {
+            throw new InvalidArgumentException('A oportunidade já foi assumida ou não está disponível.');
+        }
+        if (count_captor_pipeline_stage($connection, (int) $opportunity['captador_usuario_id'], 'development')
+            >= operational_limit('captador_em_desenvolvimento', $connection)) {
+            throw new InvalidArgumentException('O captador deste lead atingiu o limite em desenvolvimento.');
+        }
+
+        $hours = operational_limit('dev_prazo_horas', $connection);
         $statement = $connection->prepare(
             "UPDATE oportunidades
-             SET desenvolvedor_usuario_id = :user_id, status = 'assumida', assumida_em = CURRENT_TIMESTAMP(6)
-             WHERE uuid = :uuid AND desenvolvedor_usuario_id IS NULL AND status = 'aberta'"
+             SET desenvolvedor_usuario_id = :user_id, status = 'assumida',
+                 assumida_em = CURRENT_TIMESTAMP(6),
+                 prazo_desenvolvimento_em = DATE_ADD(CURRENT_TIMESTAMP(6), INTERVAL {$hours} HOUR)
+             WHERE id = :id AND desenvolvedor_usuario_id IS NULL AND status = 'aberta'"
         );
-        $statement->execute(['user_id' => $actor['id'], 'uuid' => $uuid]);
+        $statement->execute(['user_id' => $actor['id'], 'id' => $opportunity['id']]);
         if ($statement->rowCount() !== 1) {
             throw new InvalidArgumentException('A oportunidade já foi assumida ou não está disponível.');
         }
-        audit_event($connection, 'oportunidade.assumida', 'oportunidade', $uuid, $actor['uuid']);
+        audit_event($connection, 'oportunidade.assumida', 'oportunidade', $uuid, $actor['uuid'], [
+            'prazo_horas' => $hours,
+        ]);
         $connection->commit();
     } catch (Throwable $error) {
         if ($connection->inTransaction()) {
@@ -400,6 +442,7 @@ function claim_opportunity(string $uuid, array $actor): void
 
 function submit_project(array $input, array $actor): string
 {
+    release_expired_developer_assignments();
     $opportunityUuid = (string) ($input['opportunity_uuid'] ?? '');
     $name = trim((string) ($input['project_name'] ?? ''));
     $previewUrl = trim((string) ($input['preview_url'] ?? ''));
@@ -416,7 +459,7 @@ function submit_project(array $input, array $actor): string
     $connection->beginTransaction();
     try {
         $find = $connection->prepare(
-            "SELECT o.id, o.status, p.id projeto_id, p.uuid projeto_uuid
+            "SELECT o.id, o.status, o.prazo_desenvolvimento_em, p.id projeto_id, p.uuid projeto_uuid
              FROM oportunidades o
              LEFT JOIN projetos p
                ON p.oportunidade_id = o.id
@@ -433,6 +476,21 @@ function submit_project(array $input, array $actor): string
         $work = $find->fetch();
         if (!is_array($work) || !in_array($work['status'], ['assumida','em_desenvolvimento','ajustes'], true)) {
             throw new InvalidArgumentException('Oportunidade indisponível para envio.');
+        }
+
+        if ($work['status'] !== 'ajustes'
+            && !empty($work['prazo_desenvolvimento_em'])
+            && strtotime((string) $work['prazo_desenvolvimento_em']) <= time()) {
+            throw new InvalidArgumentException('O prazo desta oportunidade expirou e ela voltou para a fila.');
+        }
+        if (count_user_status(
+            $connection,
+            'oportunidades',
+            (int) $actor['id'],
+            'desenvolvedor_usuario_id',
+            ['em_revisao']
+        ) >= operational_limit('dev_em_revisao', $connection)) {
+            throw new InvalidArgumentException('Você atingiu o limite de projetos em revisão.');
         }
 
         if ($work['projeto_id'] === null) {
@@ -541,9 +599,11 @@ function review_project(array $input, array $actor): void
     try {
         $find = $connection->prepare(
             "SELECT r.id revisao_id, r.decisao, p.id projeto_id, p.uuid projeto_uuid, p.oportunidade_id,
-                    p.desenvolvedor_usuario_id
+                    p.desenvolvedor_usuario_id, l.captador_usuario_id
              FROM projeto_revisoes r
              INNER JOIN projetos p ON p.id = r.projeto_id
+             INNER JOIN oportunidades op ON op.id = p.oportunidade_id
+             INNER JOIN leads l ON l.id = op.lead_id
              WHERE r.uuid = :uuid
              FOR UPDATE"
         );
@@ -567,6 +627,10 @@ function review_project(array $input, array $actor): void
         ]);
 
         if ($decision === 'aprovado') {
+            if (count_captor_pipeline_stage($connection, (int) $review['captador_usuario_id'], 'commercial')
+                >= operational_limit('captador_aberto_comercial', $connection)) {
+                throw new InvalidArgumentException('O captador atingiu o limite de leads abertos no comercial.');
+            }
             $value = (float) str_replace(',', '.', (string) ($input['value_brl'] ?? '0'));
             $paymentLink = trim((string) ($input['payment_link'] ?? ''));
             if ($value <= 0 || !valid_web_url($paymentLink, true)) {
@@ -613,8 +677,13 @@ function review_project(array $input, array $actor): void
         } elseif ($decision === 'ajustes') {
             $connection->prepare("UPDATE projetos SET status = 'ajustes' WHERE id = :id")
                 ->execute(['id' => $review['projeto_id']]);
-            $connection->prepare("UPDATE oportunidades SET status = 'ajustes' WHERE id = :id")
-                ->execute(['id' => $review['oportunidade_id']]);
+            $hours = operational_limit('dev_prazo_horas', $connection);
+            $connection->prepare(
+                "UPDATE oportunidades
+                 SET status = 'ajustes',
+                     prazo_desenvolvimento_em = DATE_ADD(CURRENT_TIMESTAMP(6), INTERVAL {$hours} HOUR)
+                 WHERE id = :id"
+            )->execute(['id' => $review['oportunidade_id']]);
         } else {
             if ($rejectionAction === 'requeue') {
                 $connection->prepare("UPDATE projetos SET status = 'arquivado' WHERE id = :id")
@@ -622,7 +691,7 @@ function review_project(array $input, array $actor): void
                 $connection->prepare(
                     "UPDATE oportunidades
                      SET status = 'aberta', desenvolvedor_usuario_id = NULL,
-                         assumida_em = NULL, encerrada_em = NULL
+                         assumida_em = NULL, prazo_desenvolvimento_em = NULL, encerrada_em = NULL
                      WHERE id = :id"
                 )->execute(['id' => $review['oportunidade_id']]);
             } else {
@@ -651,7 +720,6 @@ function review_project(array $input, array $actor): void
 
 function list_commercial_sales(int $userId): array
 {
-    // A fila aberta não carrega lead, contatos, valor, preview ou pagamento.
     $available = db()->query(
         "SELECT v.uuid, v.status, v.created_at
          FROM vendas v
@@ -661,34 +729,56 @@ function list_commercial_sales(int $userId): array
     )->fetchAll();
 
     $mineStatement = db()->prepare(
-        "SELECT v.uuid, v.status, v.assumida_em, v.updated_at,
+        "SELECT v.id venda_id, v.uuid, v.status, v.assumida_em, v.proximo_contato_em,
+                v.ultimo_resultado, v.updated_at,
                 o.valor_brl, o.link_pagamento,
                 p.nome projeto_nome, p.url_preview, l.nome lead_nome,
-                GROUP_CONCAT(CONCAT(lc.tipo, ': ', lc.valor) ORDER BY lc.tipo SEPARATOR ' | ') contatos
+                GROUP_CONCAT(DISTINCT CONCAT(lc.tipo, ': ', lc.valor) ORDER BY lc.tipo SEPARATOR ' | ') contatos,
+                GROUP_CONCAT(DISTINCT CASE WHEN vpe.status = 'interesse' THEN pe.uuid END) produtos_extras_ids
          FROM vendas v
          INNER JOIN ofertas o ON o.id = v.oferta_id
          INNER JOIN projetos p ON p.id = o.projeto_id
          INNER JOIN oportunidades op ON op.id = p.oportunidade_id
          INNER JOIN leads l ON l.id = op.lead_id
          LEFT JOIN lead_contatos lc ON lc.lead_id = l.id
+         LEFT JOIN venda_produtos_extras vpe ON vpe.venda_id = v.id
+         LEFT JOIN produtos_extras pe ON pe.id = vpe.produto_extra_id
          WHERE v.comercial_usuario_id = :user_id
-           AND v.status IN ('em_atendimento','aguardando_pagamento')
-         GROUP BY v.id, v.uuid, v.status, v.assumida_em, v.updated_at,
-                  o.valor_brl, o.link_pagamento, p.nome, p.url_preview, l.nome
-         ORDER BY v.updated_at DESC"
+           AND v.status IN ('em_atendimento','retorno_agendado','aguardando_pagamento')
+         GROUP BY v.id, v.uuid, v.status, v.assumida_em, v.proximo_contato_em,
+                  v.ultimo_resultado, v.updated_at, o.valor_brl, o.link_pagamento,
+                  p.nome, p.url_preview, l.nome
+         ORDER BY FIELD(v.status, 'retorno_agendado', 'aguardando_pagamento', 'em_atendimento'),
+                  v.proximo_contato_em IS NULL, v.proximo_contato_em, v.updated_at DESC"
     );
     $mineStatement->execute(['user_id' => $userId]);
+    $mine = $mineStatement->fetchAll();
+    foreach ($mine as &$sale) {
+        $sale['selected_product_ids'] = array_values(array_filter(explode(',', (string) ($sale['produtos_extras_ids'] ?? ''))));
+    }
+    unset($sale);
 
-    return ['available' => $available, 'mine' => $mineStatement->fetchAll()];
+    return ['available' => $available, 'mine' => $mine];
 }
+
 function claim_sale(string $uuid, array $actor): void
 {
     $connection = db();
     $connection->beginTransaction();
     try {
+        if (count_user_status(
+            $connection,
+            'vendas',
+            (int) $actor['id'],
+            'comercial_usuario_id',
+            ['em_atendimento']
+        ) >= operational_limit('comercial_em_atendimento', $connection)) {
+            throw new InvalidArgumentException('Você atingiu o limite de vendas em atendimento.');
+        }
         $statement = $connection->prepare(
             "UPDATE vendas
-             SET comercial_usuario_id = :user_id, status = 'em_atendimento', assumida_em = CURRENT_TIMESTAMP(6)
+             SET comercial_usuario_id = :user_id, status = 'em_atendimento',
+                 assumida_em = CURRENT_TIMESTAMP(6), ultimo_resultado = NULL
              WHERE uuid = :uuid AND comercial_usuario_id IS NULL AND status = 'disponivel'"
         );
         $statement->execute(['user_id' => $actor['id'], 'uuid' => $uuid]);
@@ -712,6 +802,7 @@ function record_sale_interaction(array $input, array $actor): void
     $result = (string) ($input['result'] ?? '');
     $notes = trim((string) ($input['notes'] ?? ''));
     $nextContact = trim((string) ($input['next_contact_at'] ?? ''));
+    $extraProducts = is_array($input['extra_products'] ?? null) ? $input['extra_products'] : [];
 
     if (!in_array($channel, ['whatsapp','email','instagram','telefone','outro'], true)) {
         throw new InvalidArgumentException('Canal inválido.');
@@ -719,20 +810,46 @@ function record_sale_interaction(array $input, array $actor): void
     if (!in_array($result, ['contato_realizado','retorno_agendado','aguardando_pagamento','perdido'], true)) {
         throw new InvalidArgumentException('Resultado inválido.');
     }
-    if ($nextContact !== '' && strtotime($nextContact) === false) {
+    $nextContactTimestamp = $nextContact !== '' ? strtotime($nextContact) : false;
+    if ($nextContact !== '' && $nextContactTimestamp === false) {
         throw new InvalidArgumentException('Data do próximo contato inválida.');
+    }
+    if ($result === 'retorno_agendado' && ($nextContactTimestamp === false || $nextContactTimestamp <= time())) {
+        throw new InvalidArgumentException('Informe uma data futura para o retorno agendado.');
     }
 
     $connection = db();
     $connection->beginTransaction();
     try {
         $find = $connection->prepare(
-            'SELECT id FROM vendas WHERE uuid = :uuid AND comercial_usuario_id = :user_id FOR UPDATE'
+            'SELECT id, status FROM vendas
+             WHERE uuid = :uuid AND comercial_usuario_id = :user_id
+               AND status IN (\'em_atendimento\',\'retorno_agendado\',\'aguardando_pagamento\')
+             FOR UPDATE'
         );
         $find->execute(['uuid' => $saleUuid, 'user_id' => $actor['id']]);
-        $saleId = $find->fetchColumn();
-        if ($saleId === false) {
+        $sale = $find->fetch();
+        if (!is_array($sale)) {
             throw new InvalidArgumentException('Venda não encontrada para este usuário.');
+        }
+        $saleId = (int) $sale['id'];
+
+        $targetStatus = match ($result) {
+            'retorno_agendado' => 'retorno_agendado',
+            'aguardando_pagamento' => 'aguardando_pagamento',
+            'perdido' => 'perdida',
+            default => 'em_atendimento',
+        };
+        $settingKey = match ($targetStatus) {
+            'retorno_agendado' => 'comercial_retorno_agendado',
+            'aguardando_pagamento' => 'comercial_aguardando_pagamento',
+            'em_atendimento' => 'comercial_em_atendimento',
+            default => null,
+        };
+        if ($settingKey !== null && $sale['status'] !== $targetStatus
+            && count_user_status($connection, 'vendas', (int) $actor['id'], 'comercial_usuario_id', [$targetStatus])
+                >= operational_limit($settingKey, $connection)) {
+            throw new InvalidArgumentException('Você atingiu o limite para este status comercial.');
         }
 
         $interaction = $connection->prepare(
@@ -741,6 +858,7 @@ function record_sale_interaction(array $input, array $actor): void
              VALUES
                 (:uuid, :sale_id, :user_id, :channel, :result, :notes, :next_contact)'
         );
+        $formattedNextContact = $nextContactTimestamp !== false ? date('Y-m-d H:i:s', $nextContactTimestamp) : null;
         $interaction->execute([
             'uuid' => uuid_v4(),
             'sale_id' => $saleId,
@@ -748,21 +866,39 @@ function record_sale_interaction(array $input, array $actor): void
             'channel' => $channel,
             'result' => $result,
             'notes' => $notes !== '' ? $notes : null,
-            'next_contact' => $nextContact !== '' ? date('Y-m-d H:i:s', strtotime($nextContact)) : null,
+            'next_contact' => $formattedNextContact,
         ]);
 
-        if ($result === 'aguardando_pagamento') {
-            $connection->prepare("UPDATE vendas SET status = 'aguardando_pagamento' WHERE id = :id")
-                ->execute(['id' => $saleId]);
-        } elseif ($result === 'perdido') {
+        if ($targetStatus === 'perdida') {
             $connection->prepare(
-                "UPDATE vendas SET status = 'perdida', perdida_em = CURRENT_TIMESTAMP(6), perda_motivo = :reason WHERE id = :id"
-            )->execute(['reason' => $notes !== '' ? $notes : 'Não informado', 'id' => $saleId]);
+                "UPDATE vendas
+                 SET status = 'perdida', perdida_em = CURRENT_TIMESTAMP(6),
+                     perda_motivo = :reason, proximo_contato_em = NULL, ultimo_resultado = :result
+                 WHERE id = :id"
+            )->execute([
+                'reason' => $notes !== '' ? $notes : 'Não informado',
+                'result' => $result,
+                'id' => $saleId,
+            ]);
+        } else {
+            $connection->prepare(
+                'UPDATE vendas
+                 SET status = :status, proximo_contato_em = :next_contact, ultimo_resultado = :result
+                 WHERE id = :id'
+            )->execute([
+                'status' => $targetStatus,
+                'next_contact' => $targetStatus === 'retorno_agendado' ? $formattedNextContact : null,
+                'result' => $result,
+                'id' => $saleId,
+            ]);
         }
 
+        sync_sale_extra_products($connection, $saleId, $extraProducts, (int) $actor['id']);
         audit_event($connection, 'venda.interacao_registrada', 'venda', $saleUuid, $actor['uuid'], [
             'canal' => $channel,
             'resultado' => $result,
+            'proximo_contato_em' => $formattedNextContact,
+            'produtos_extras' => count($extraProducts),
         ]);
         $connection->commit();
     } catch (Throwable $error) {
@@ -771,4 +907,270 @@ function record_sale_interaction(array $input, array $actor): void
         }
         throw $error;
     }
+}
+
+
+function operational_setting_definitions(): array
+{
+    return [
+        'captador_na_fila' => ['label' => 'Leads do captador na fila', 'default' => 5, 'min' => 1, 'max' => 100],
+        'captador_em_desenvolvimento' => ['label' => 'Leads do captador em desenvolvimento', 'default' => 5, 'min' => 1, 'max' => 100],
+        'captador_aberto_comercial' => ['label' => 'Leads do captador no comercial', 'default' => 10, 'min' => 1, 'max' => 200],
+        'dev_assumida' => ['label' => 'Projetos ativos por desenvolvedor', 'default' => 1, 'min' => 1, 'max' => 20],
+        'dev_em_revisao' => ['label' => 'Projetos em revisão por desenvolvedor', 'default' => 5, 'min' => 1, 'max' => 50],
+        'dev_prazo_horas' => ['label' => 'Prazo da primeira entrega (horas)', 'default' => 12, 'min' => 1, 'max' => 168],
+        'comercial_em_atendimento' => ['label' => 'Vendas em atendimento por comercial', 'default' => 5, 'min' => 1, 'max' => 100],
+        'comercial_retorno_agendado' => ['label' => 'Retornos agendados por comercial', 'default' => 5, 'min' => 1, 'max' => 100],
+        'comercial_aguardando_pagamento' => ['label' => 'Pagamentos aguardando por comercial', 'default' => 5, 'min' => 1, 'max' => 100],
+    ];
+}
+
+function operational_limit(string $key, ?PDO $connection = null): int
+{
+    $definitions = operational_setting_definitions();
+    if (!isset($definitions[$key])) {
+        throw new InvalidArgumentException('Configuração operacional desconhecida.');
+    }
+    $connection ??= db();
+    $statement = $connection->prepare(
+        'SELECT valor_inteiro FROM configuracoes_operacionais WHERE chave = :key'
+    );
+    $statement->execute(['key' => $key]);
+    $value = $statement->fetchColumn();
+    return $value === false ? (int) $definitions[$key]['default'] : (int) $value;
+}
+
+function list_operational_settings(): array
+{
+    $definitions = operational_setting_definitions();
+    $rows = db()->query('SELECT chave, valor_inteiro, updated_at FROM configuracoes_operacionais')->fetchAll();
+    $values = [];
+    foreach ($rows as $row) {
+        $values[$row['chave']] = $row;
+    }
+    foreach ($definitions as $key => &$definition) {
+        $definition['key'] = $key;
+        $definition['value'] = (int) ($values[$key]['valor_inteiro'] ?? $definition['default']);
+        $definition['updated_at'] = $values[$key]['updated_at'] ?? null;
+    }
+    unset($definition);
+    return array_values($definitions);
+}
+
+function save_operational_settings(array $input, array $actor): void
+{
+    $definitions = operational_setting_definitions();
+    $connection = db();
+    $connection->beginTransaction();
+    try {
+        $statement = $connection->prepare(
+            'INSERT INTO configuracoes_operacionais
+                (chave, valor_inteiro, descricao, atualizado_por_usuario_id)
+             VALUES (:key, :value, :description, :actor_id)
+             ON DUPLICATE KEY UPDATE
+                valor_inteiro = VALUES(valor_inteiro),
+                descricao = VALUES(descricao),
+                atualizado_por_usuario_id = VALUES(atualizado_por_usuario_id)'
+        );
+        foreach ($definitions as $key => $definition) {
+            $value = filter_var($input[$key] ?? null, FILTER_VALIDATE_INT);
+            if ($value === false || $value < $definition['min'] || $value > $definition['max']) {
+                throw new InvalidArgumentException('Valor inválido para ' . $definition['label'] . '.');
+            }
+            $statement->execute([
+                'key' => $key,
+                'value' => $value,
+                'description' => $definition['label'],
+                'actor_id' => $actor['id'],
+            ]);
+        }
+        audit_event($connection, 'configuracoes_operacionais.atualizadas', 'configuracao', uuid_v4(), $actor['uuid']);
+        $connection->commit();
+    } catch (Throwable $error) {
+        if ($connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        throw $error;
+    }
+}
+
+function count_captor_pipeline_stage(PDO $connection, int $captorId, string $stage): int
+{
+    $statuses = match ($stage) {
+        'queue' => ['aberta'],
+        'development' => ['assumida','em_desenvolvimento','em_revisao','ajustes'],
+        'commercial' => ['aprovada','em_venda'],
+        default => throw new InvalidArgumentException('Etapa do funil inválida.'),
+    };
+    $placeholders = implode(',', array_fill(0, count($statuses), '?'));
+    $statement = $connection->prepare(
+        "SELECT COUNT(*)
+         FROM oportunidades o
+         INNER JOIN leads l ON l.id = o.lead_id
+         WHERE l.captador_usuario_id = ? AND o.status IN ($placeholders)"
+    );
+    $statement->execute(array_merge([$captorId], $statuses));
+    return (int) $statement->fetchColumn();
+}
+
+function count_user_status(PDO $connection, string $table, int $userId, string $userColumn, array $statuses): int
+{
+    if (!in_array($table, ['oportunidades','vendas'], true)
+        || !in_array($userColumn, ['desenvolvedor_usuario_id','comercial_usuario_id'], true)) {
+        throw new InvalidArgumentException('Contagem operacional inválida.');
+    }
+    $placeholders = implode(',', array_fill(0, count($statuses), '?'));
+    $statement = $connection->prepare(
+        "SELECT COUNT(*) FROM {$table} WHERE {$userColumn} = ? AND status IN ($placeholders)"
+    );
+    $statement->execute(array_merge([$userId], $statuses));
+    return (int) $statement->fetchColumn();
+}
+
+function release_expired_developer_assignments(): int
+{
+    $connection = db();
+    $connection->beginTransaction();
+    try {
+        $expired = $connection->query(
+            "SELECT uuid, id
+             FROM oportunidades
+             WHERE status IN ('assumida','em_desenvolvimento')
+               AND prazo_desenvolvimento_em IS NOT NULL
+               AND prazo_desenvolvimento_em <= CURRENT_TIMESTAMP(6)
+             FOR UPDATE"
+        )->fetchAll();
+        foreach ($expired as $item) {
+            $connection->prepare(
+                "UPDATE projetos SET status = 'arquivado'
+                 WHERE oportunidade_id = :opportunity_id AND status = 'rascunho'"
+            )->execute(['opportunity_id' => $item['id']]);
+            $connection->prepare(
+                "UPDATE oportunidades
+                 SET status = 'aberta', desenvolvedor_usuario_id = NULL,
+                     assumida_em = NULL, prazo_desenvolvimento_em = NULL
+                 WHERE id = :id"
+            )->execute(['id' => $item['id']]);
+            audit_event($connection, 'oportunidade.prazo_expirado', 'oportunidade', $item['uuid'], null);
+        }
+        $connection->commit();
+        return count($expired);
+    } catch (Throwable $error) {
+        if ($connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        throw $error;
+    }
+}
+
+function list_active_extra_products(): array
+{
+    return db()->query(
+        "SELECT uuid, codigo, nome, descricao, valor_sugerido_brl
+         FROM produtos_extras
+         WHERE status = 'ativo'
+         ORDER BY ordem, nome"
+    )->fetchAll();
+}
+
+function sync_sale_extra_products(PDO $connection, int $saleId, array $productUuids, int $actorId): void
+{
+    $productUuids = array_values(array_unique(array_filter(array_map('strval', $productUuids))));
+    if (count($productUuids) > 20) {
+        throw new InvalidArgumentException('Produtos adicionais inválidos.');
+    }
+
+    $connection->prepare(
+        "UPDATE venda_produtos_extras
+         SET status = 'cancelado'
+         WHERE venda_id = :sale_id AND status = 'interesse'"
+    )->execute(['sale_id' => $saleId]);
+
+    if ($productUuids === []) {
+        return;
+    }
+
+    $lookup = $connection->prepare(
+        "SELECT id FROM produtos_extras WHERE uuid = :uuid AND status = 'ativo'"
+    );
+    $upsert = $connection->prepare(
+        "INSERT INTO venda_produtos_extras
+            (venda_id, produto_extra_id, marcado_por_usuario_id, status)
+         VALUES (:sale_id, :product_id, :actor_id, 'interesse')
+         ON DUPLICATE KEY UPDATE
+            marcado_por_usuario_id = VALUES(marcado_por_usuario_id),
+            status = 'interesse',
+            marcado_em = CURRENT_TIMESTAMP(6)"
+    );
+    foreach ($productUuids as $uuid) {
+        $lookup->execute(['uuid' => $uuid]);
+        $productId = $lookup->fetchColumn();
+        if ($productId === false) {
+            throw new InvalidArgumentException('Um produto adicional não está disponível.');
+        }
+        $upsert->execute(['sale_id' => $saleId, 'product_id' => $productId, 'actor_id' => $actorId]);
+    }
+}
+
+function list_admin_projects_overview(): array
+{
+    return db()->query(
+        "SELECT p.uuid, p.nome, p.status projeto_status, p.url_preview, p.custo_hospedagem_brl,
+                l.nome lead_nome, u.nome desenvolvedor_nome, v.status venda_status,
+                v.proximo_contato_em,
+                GROUP_CONCAT(DISTINCT CASE WHEN vpe.status IN ('interesse','confirmado') THEN pe.nome END
+                    ORDER BY pe.ordem SEPARATOR ' | ') produtos_extras
+         FROM projetos p
+         INNER JOIN oportunidades op ON op.id = p.oportunidade_id
+         INNER JOIN leads l ON l.id = op.lead_id
+         INNER JOIN usuarios u ON u.id = p.desenvolvedor_usuario_id
+         LEFT JOIN ofertas ofe ON ofe.projeto_id = p.id
+         LEFT JOIN vendas v ON v.oferta_id = ofe.id
+         LEFT JOIN venda_produtos_extras vpe ON vpe.venda_id = v.id
+         LEFT JOIN produtos_extras pe ON pe.id = vpe.produto_extra_id
+         WHERE p.status IN ('aprovado','ajustes','em_revisao')
+         GROUP BY p.id, p.uuid, p.nome, p.status, p.url_preview, p.custo_hospedagem_brl,
+                  l.nome, u.nome, v.status, v.proximo_contato_em
+         ORDER BY p.updated_at DESC"
+    )->fetchAll();
+}
+
+function list_lost_sales(): array
+{
+    return db()->query(
+        "SELECT v.uuid, v.perdida_em, v.perda_motivo, p.nome projeto_nome,
+                l.nome lead_nome, u.nome comercial_nome
+         FROM vendas v
+         INNER JOIN ofertas o ON o.id = v.oferta_id
+         INNER JOIN projetos p ON p.id = o.projeto_id
+         INNER JOIN oportunidades op ON op.id = p.oportunidade_id
+         INNER JOIN leads l ON l.id = op.lead_id
+         LEFT JOIN usuarios u ON u.id = v.comercial_usuario_id
+         WHERE v.status = 'perdida'
+         ORDER BY v.perdida_em DESC, v.updated_at DESC"
+    )->fetchAll();
+}
+
+function save_project_hosting_cost(array $input, array $actor): void
+{
+    $projectUuid = (string) ($input['project_uuid'] ?? '');
+    $value = (float) str_replace(',', '.', (string) ($input['hosting_cost_brl'] ?? '0'));
+    if ($value < 0 || $value > 1000000) {
+        throw new InvalidArgumentException('Custo de hospedagem inválido.');
+    }
+    $connection = db();
+    $statement = $connection->prepare(
+        'UPDATE projetos SET custo_hospedagem_brl = :value WHERE uuid = :uuid'
+    );
+    $statement->execute(['value' => number_format($value, 2, '.', ''), 'uuid' => $projectUuid]);
+    if ($statement->rowCount() !== 1) {
+        $exists = $connection->prepare('SELECT 1 FROM projetos WHERE uuid = :uuid');
+        $exists->execute(['uuid' => $projectUuid]);
+        if ($exists->fetchColumn() === false) {
+            throw new InvalidArgumentException('Projeto não encontrado.');
+        }
+    }
+    audit_event($connection, 'projeto.custo_hospedagem_atualizado', 'projeto', $projectUuid, $actor['uuid'], [
+        'valor_brl' => $value,
+    ]);
 }

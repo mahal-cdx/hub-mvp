@@ -57,3 +57,36 @@
   <?php endforeach; ?>
   </div>
 </section>
+
+
+<section class="panel finance-section">
+  <header class="section-title"><div><p class="eyebrow">Caixa</p><h2>Entradas, saídas e despesas</h2><p>Pagamentos aprovados entram automaticamente. Custos e demais movimentações podem ser registrados manualmente.</p></div></header>
+  <div class="finance-summary-grid">
+    <article><span>Entradas</span><strong>R$ <?= e(number_format((float) $ledger['summary']['entrada'], 2, ',', '.')) ?></strong></article>
+    <article><span>Saídas</span><strong>R$ <?= e(number_format((float) $ledger['summary']['saida'], 2, ',', '.')) ?></strong></article>
+    <article><span>Despesas</span><strong>R$ <?= e(number_format((float) $ledger['summary']['despesa'], 2, ',', '.')) ?></strong></article>
+    <article class="<?= $ledger['summary']['saldo'] < 0 ? 'negative' : 'positive' ?>"><span>Saldo registrado</span><strong>R$ <?= e(number_format((float) $ledger['summary']['saldo'], 2, ',', '.')) ?></strong></article>
+  </div>
+
+  <form class="movement-form" method="post" action="/finance/movement">
+    <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+    <label class="field"><span>Tipo</span><select name="type"><option value="entrada">Entrada</option><option value="saida">Saída</option><option value="despesa">Despesa</option></select></label>
+    <label class="field"><span>Categoria</span><input name="category" maxlength="80" placeholder="Hospedagem, domínio, ferramenta..." required></label>
+    <label class="field"><span>Valor (R$)</span><input name="value_brl" inputmode="decimal" required></label>
+    <label class="field"><span>Competência</span><input type="date" name="competence" value="<?= e(date('Y-m-d')) ?>" required></label>
+    <label class="field field-full"><span>Projeto relacionado</span><select name="project_uuid"><option value="">Movimentação geral</option><?php foreach ($financeProjects as $project): ?><option value="<?= e($project['uuid']) ?>"><?= e($project['nome']) ?></option><?php endforeach; ?></select></label>
+    <label class="field field-full"><span>Descrição</span><input name="description" maxlength="255" required></label>
+    <button class="button button-primary" type="submit">Registrar movimentação</button>
+  </form>
+
+  <div class="ledger-list">
+    <?php if ($ledger['items'] === []): ?><p class="empty">Nenhuma movimentação registrada.</p><?php endif; ?>
+    <?php foreach ($ledger['items'] as $movement): ?>
+      <article class="ledger-row">
+        <span class="finance-type finance-type-<?= e($movement['tipo']) ?>"><?= e($movement['tipo']) ?></span>
+        <div><strong><?= e($movement['descricao']) ?></strong><small><?= e($movement['categoria']) ?><?= $movement['projeto_nome'] ? ' · ' . e($movement['projeto_nome']) : '' ?> · <?= e($movement['competencia']) ?></small></div>
+        <strong>R$ <?= e(number_format((float) $movement['valor_brl'], 2, ',', '.')) ?></strong>
+      </article>
+    <?php endforeach; ?>
+  </div>
+</section>
