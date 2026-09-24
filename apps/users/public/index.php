@@ -61,7 +61,7 @@ if ($method === 'GET' && preg_match('#^/references/([0-9a-f-]{36})$#', $path, $m
     send_reference_image($matches[1], $user, isset($_GET['download']));
 }
 
-if ($method === 'GET' && $path === '/leads') {
+if ($method === 'GET' && in_array($path, ['/leads','/leads/new'], true)) {
     $user = require_operational_user();
     if (!user_has_role($user, 'captador')) {
         render_error(403, 'Seu usuário não possui a função de captador.');
@@ -76,12 +76,14 @@ if ($method === 'GET' && $path === '/leads') {
             $error = 'Este cadastro não está mais aberto para edição.';
         }
     }
+    $showForm = $path === '/leads/new' || $editUuid !== '';
 
     render('leads', [
-        'title' => 'Cadastro de leads',
+        'title' => $showForm ? ($editLead !== null ? 'Editar lead' : 'Adicionar lead') : 'Meus cadastros',
         'user' => $user,
         'leads' => list_captor_leads((int) $user['id']),
         'editLead' => $editLead,
+        'showForm' => $showForm,
         'error' => $error,
         'success' => isset($_GET['saved']),
         'values' => $editLead ?? [],
@@ -107,6 +109,7 @@ if ($method === 'POST' && $path === '/leads') {
             'error' => $error->getMessage(),
             'success' => false,
             'values' => $_POST,
+            'showForm' => true,
         ], 422);
     }
 }
@@ -131,6 +134,7 @@ if ($method === 'POST' && $path === '/leads/update') {
             'error' => $error->getMessage(),
             'success' => false,
             'values' => $_POST + ($editLead ?? []),
+            'showForm' => true,
         ], 422);
     }
 }
@@ -265,7 +269,7 @@ if ($method === 'POST' && $path === '/wallet/withdraw') {
     }
 }
 
-if (in_array($path, ['/login','/logout','/','/leads','/leads/update','/leads/references/delete','/dev','/dev/claim','/dev/submit','/sales','/sales/claim','/sales/contact','/wallet','/wallet/withdraw'], true)) {
+if (in_array($path, ['/login','/logout','/','/leads','/leads/new','/leads/update','/leads/references/delete','/dev','/dev/claim','/dev/submit','/sales','/sales/claim','/sales/contact','/wallet','/wallet/withdraw'], true)) {
     header('Allow: GET, POST');
     render_error(405, 'Método não permitido.');
 }

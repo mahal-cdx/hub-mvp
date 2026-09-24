@@ -2,6 +2,8 @@
 $pageTitle = ($title ?? config('name')) . ' · ' . config('name');
 $authenticated = is_array($user ?? null);
 $currentPath = route_path();
+$cssVersion = (string) (@filemtime('/var/www/app/public/assets/css/user.css') ?: 1);
+$jsVersion = (string) (@filemtime('/var/www/app/public/assets/js/user.js') ?: 1);
 ?>
 <!doctype html>
 <html lang="pt-BR" data-theme="dark">
@@ -11,8 +13,8 @@ $currentPath = route_path();
   <meta name="theme-color" content="#07100f">
   <meta name="robots" content="noindex,nofollow">
   <title><?= e($pageTitle) ?></title>
-  <link rel="stylesheet" href="/assets/css/user.css">
-  <script defer src="/assets/js/user.js"></script>
+  <link rel="stylesheet" href="/assets/css/user.css?v=<?= e($cssVersion) ?>">
+  <script defer src="/assets/js/user.js?v=<?= e($jsVersion) ?>"></script>
 </head>
 <body class="<?= $authenticated ? 'app-page' : 'auth-page' ?>">
 <a class="skip-link" href="#main-content">Pular para o conteúdo</a>

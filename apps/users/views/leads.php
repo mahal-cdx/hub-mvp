@@ -1,20 +1,28 @@
 <?php
 $isEditing = is_array($editLead ?? null);
 $formAction = $isEditing ? '/leads/update' : '/leads';
+$showForm = (bool) ($showForm ?? false) || $isEditing;
 $formTitle = $isEditing ? 'Editar cadastro aberto' : 'Cadastrar novo lead';
 ?>
 <section class="page-head">
   <div>
     <p class="eyebrow">Captação</p>
-    <h1>Cadastro de leads</h1>
-    <p>Complete o máximo de informações possível. A temperatura é calculada automaticamente pela riqueza do cadastro.</p>
+    <h1><?= $showForm ? e($formTitle) : 'Meus cadastros' ?></h1>
+    <p><?= $showForm ? 'Complete o máximo de informações possível. A temperatura é calculada automaticamente.' : 'Acompanhe o status e a evolução dos leads cadastrados.' ?></p>
+  </div>
+  <div class="page-head-actions">
+    <?php if ($showForm): ?>
+      <a class="button button-secondary" href="/leads">Voltar para meus cadastros</a>
+    <?php else: ?>
+      <a class="button button-primary" href="/leads/new">Adicionar lead</a>
+    <?php endif; ?>
   </div>
 </section>
 
 <?php if ($success): ?><div class="alert alert-success" role="status">Cadastro atualizado e fluxo sincronizado.</div><?php endif; ?>
 <?php if (is_string($error) && $error !== ''): ?><div class="alert alert-error" role="alert"><?= e($error) ?></div><?php endif; ?>
 
-<div class="lead-layout">
+<?php if ($showForm): ?>
   <section class="workflow-section lead-form-section">
     <header class="section-heading">
       <div><p class="section-kicker"><?= $isEditing ? 'Cadastro aberto' : 'Nova oportunidade' ?></p><h2><?= e($formTitle) ?></h2><p><?= $isEditing ? 'Você pode enriquecer os dados enquanto o lead estiver na fila.' : 'O cadastro entra automaticamente na fila de desenvolvimento.' ?></p></div>
@@ -95,7 +103,7 @@ $formTitle = $isEditing ? 'Editar cadastro aberto' : 'Cadastrar novo lead';
               <article class="reference-tile">
                 <img src="/references/<?= e($reference['uuid']) ?>" alt="<?= e($reference['nome_original']) ?>">
                 <div><strong><?= e($reference['nome_original']) ?></strong><small><?= e(number_format((int) $reference['tamanho_bytes'] / 1048576, 2, ',', '.')) ?> MB</small></div>
-                <button class="button button-danger button-small" type="submit" form="delete-reference-<?= e($reference['uuid']) ?>">Remover</button>
+                <button class="reference-tile-remove" type="submit" form="delete-reference-<?= e($reference['uuid']) ?>" aria-label="Remover <?= e($reference['nome_original']) ?>" title="Remover imagem">×</button>
               </article>
             <?php endforeach; ?>
           </div>
@@ -115,10 +123,10 @@ $formTitle = $isEditing ? 'Editar cadastro aberto' : 'Cadastrar novo lead';
       <?php endforeach; ?>
     <?php endif; ?>
   </section>
-
-  <section class="workflow-section lead-list-section">
+<?php else: ?>
+  <section class="workflow-section lead-list-section leads-list-only">
     <header class="section-heading">
-      <div><p class="section-kicker">Acompanhamento</p><h2>Meus cadastros</h2><p>Status atualizado conforme o lead avança no processo.</p></div>
+      <div><p class="section-kicker">Acompanhamento</p><h2>Leads cadastrados</h2><p>Cada cadastro aparece separadamente com seu status atual.</p></div>
       <span class="count-badge"><?= e((string) count($leads)) ?> leads</span>
     </header>
 
@@ -142,4 +150,4 @@ $formTitle = $isEditing ? 'Editar cadastro aberto' : 'Cadastrar novo lead';
       <?php endforeach; ?>
     </div>
   </section>
-</div>
+<?php endif; ?>

@@ -19,7 +19,9 @@ $routes = $read('apps/users/public/index.php');
 $leads = $read('apps/users/views/leads.php');
 $developer = $read('apps/users/views/developer.php');
 $admin = $read('apps/admin/views/projects.php');
-$javascript = $read('apps/users/public/assets/app.js');
+$javascript = $read('apps/users/public/assets/js/user.js');
+$stylesheet = $read('apps/users/public/assets/css/user.css');
+$layout = $read('apps/users/views/layout.php');
 $dockerfile = $read('infrastructure/apache/Dockerfile');
 $compose = $read('docker-compose.yml');
 
@@ -37,7 +39,11 @@ $assert(str_contains($admin, 'name="rejection_action"'), 'administrador escolhe 
 $assert(str_contains($workflow, "\$rejectionAction === 'requeue'") && str_contains($workflow, "status = 'cancelada'"), 'reprovação pode reenfileirar ou arquivar');
 $assert(str_contains($javascript, 'pasteImages') && str_contains($javascript, "addEventListener('paste'"), 'colagem de imagens implementada');
 $assert(str_contains($leads, 'data-image-dialog') && str_contains($leads, 'Adicionar imagens'), 'seletor de imagens usa modal');
+$assert(str_contains($routes, "'/leads/new'") && str_contains($leads, 'href="/leads/new"'), 'listagem e formulário usam páginas separadas');
+$assert(str_contains($layout, 'filemtime') && str_contains($layout, 'user.js?v='), 'assets possuem cache busting');
+$assert(str_contains($javascript, 'reference-remove-x') && str_contains($stylesheet, '.reference-remove-x'), 'preview permite remover uma imagem específica');
 $assert(str_contains($routes, 'render_error(413'), 'excesso do POST recebe resposta amigável');
+$assert(str_contains($stylesheet, '.leads-list-only') && str_contains($stylesheet, '.lead-row:hover'), 'leads são exibidos em cartões separados');
 $assert(str_contains($dockerfile, 'upload_max_filesize=25M') && str_contains($dockerfile, 'post_max_size=260M') && str_contains($dockerfile, 'max_file_uploads=10') && str_contains($compose, '/var/www/storage/uploads'), 'runtime preparado para 10 uploads de 25 MB');
 
 fwrite(STDOUT, "OK: enriquecimento de leads validado.\n");
