@@ -1,70 +1,33 @@
-# 04 — Processo comercial
+# 04 — Processo operacional
 
-## 1. Captação
+## 1. Cadastro e enriquecimento
 
-O Captador registra um lead e reúne informações como:
+O Captador inicia o lead com pelo menos uma forma válida de contato. Pode registrar nome, e-mail, WhatsApp, Instagram, TikTok, YouTube, site, bio, logo, foto, referências, origem e observações.
 
-- nome;
-- e-mail;
-- WhatsApp;
-- Instagram;
-- TikTok;
-- YouTube;
-- bio;
-- link da bio;
-- logo;
-- foto de perfil;
-- referências;
-- redes sociais;
-- observações;
-- origem.
+O sistema calcula completude usando campos e pesos versionados. Enriquecimento pontua somente a contribuição nova prevista na regra, evitando crédito repetido pelo mesmo campo. Temperatura comercial é registrada separadamente.
 
-O lead deve possuir uma medida de **completude** e uma **temperatura comercial**.
+## 2. Qualificação e oportunidade
 
-Esses conceitos não devem ser misturados.
-
-## 2. Oportunidade
-
-Um lead pode ou não virar oportunidade.
-
-```text
-Lead
-├── descartado
-├── em análise
-└── oportunidade
-```
+O lead pode permanecer em análise, ser qualificado ou descartado com motivo. Um lead qualificado origina uma oportunidade disponível para desenvolvimento.
 
 ## 3. Desenvolvimento
 
-O Desenvolvedor pode assumir uma oportunidade e criar um projeto relacionado.
+Um Desenvolvedor assume a oportunidade em operação atômica. O sistema impede atribuição simultânea a dois desenvolvedores. O responsável cria o projeto, informa a URL de preview e o envia para revisão.
 
-O projeto terá responsável, status e referências de preview.
+## 4. Revisão administrativa
 
-## 4. Aprovação
+Cada submissão gera uma revisão. O Administrador aprova, reprova ou devolve para ajustes, sempre com ator, data e observação. Aprovação não equivale a venda.
 
-O projeto terminado é enviado para aprovação administrativa.
+## 5. Oferta e pagamento
 
-O administrador pode:
+O Administrador define o valor e vincula um link de pagamento ao projeto aprovado. No MVP, o link pode ser criado no painel do Mercado Pago e informado manualmente. A integração futura poderá criar cobranças e receber webhooks.
 
-- aprovar;
-- devolver para ajustes.
+## 6. Comercial
 
-## 5. Comercial
+O projeto entra na fila comercial quando está aprovado e possui oferta ativa. Um vendedor assume o atendimento e registra cada contato, canal, resultado e próximo retorno. Tentativas anteriores permanecem no histórico.
 
-Projetos aprovados podem ser disponibilizados ao Comercial.
+## 7. Confirmação e distribuição
 
-O Comercial trabalha a oportunidade e utiliza o link de pagamento.
+Venda e pagamento têm estados próprios. A confirmação manual inicial exige referência e evidência. Depois, um webhook validado poderá confirmar o pagamento. Uma chave idempotente impede que o mesmo pagamento distribua pontos mais de uma vez.
 
-## 6. Pagamento
-
-O MVP terá inicialmente uma ação administrativa:
-
-**Pagamento aprovado**
-
-Essa ação representa a confirmação manual do pagamento.
-
-No futuro, ela poderá ser substituída/complementada por webhook do Mercado Pago.
-
-## 7. Pós-pagamento
-
-Somente após a confirmação do pagamento são gerados os eventos de pontuação definidos nas regras administrativas.
+Quando o pagamento é confirmado, as regras vigentes geram créditos independentes para Captador, Desenvolvedor e Comercial. Cancelamentos e estornos geram eventos compensatórios; registros anteriores não são apagados.

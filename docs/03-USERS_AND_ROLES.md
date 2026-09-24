@@ -1,52 +1,41 @@
-# 03 — Usuários e funções
+# 03 — Usuários e papéis
 
-## Usuário
+## Administrador
 
-Existe uma única entidade de usuário.
+- gerencia usuários e papéis do Hub;
+- configura regras de pontuação e cotações;
+- revisa projetos e registra motivos de ajuste ou reprovação;
+- vincula preço e pagamento aos projetos aprovados;
+- confirma pagamentos durante a fase manual;
+- analisa saques, estornos e divergências;
+- consulta a trilha completa de auditoria.
 
-A função é uma relação entre usuário e papel operacional.
+## Captador
 
-Funções iniciais:
+- cadastra e enriquece leads;
+- informa origem, contatos, redes, referências e observações;
+- acompanha a completude do cadastro e o andamento das oportunidades originadas;
+- recebe os créditos definidos pelas regras aplicáveis.
 
-- `administrador`
-- `captador`
-- `desenvolvedor`
-- `comercial`
+## Desenvolvedor
 
-## Múltiplas funções
+- visualiza oportunidades disponíveis;
+- assume uma oportunidade de forma exclusiva;
+- consulta o material autorizado do lead;
+- registra o link do preview;
+- envia o projeto para revisão e responde aos pedidos de ajuste;
+- recebe os créditos definidos pelas regras aplicáveis.
 
-Exemplo:
+## Comercial
 
-```text
-Usuário Marcelo
-├── captador
-├── desenvolvedor
-└── comercial
-```
+- visualiza projetos aprovados que possuem oferta e link de pagamento ativos;
+- assume um atendimento;
+- registra contatos, retornos, resultado e próximo passo;
+- conclui a venda quando o pagamento for confirmado;
+- recebe os créditos definidos pelas regras aplicáveis.
 
-Não criar três contas para essa pessoa.
+## Regras de acesso
 
-## Administração
+Um mesmo usuário pode ter mais de um papel. A existência do papel não concede acesso irrestrito: dados de contato e ações dependem da etapa e da atribuição. O sistema registra o ator real de cada mudança.
 
-Somente administradores podem definir quais funções um usuário possui.
-
-## Separação
-
-Funções não são módulos.
-
-```text
-FUNÇÕES
-├── Administrador
-├── Captador
-├── Desenvolvedor
-└── Comercial
-
-MÓDULOS
-├── Leads
-├── Oportunidades
-├── Projetos
-├── Vendas
-├── Pontuação
-├── Carteira
-└── Saques
-```
+Contas locais e contas futuramente vinculadas ao Edge usam os mesmos papéis do Hub. Autenticação identifica o usuário; autorização continua sob controle deste módulo.

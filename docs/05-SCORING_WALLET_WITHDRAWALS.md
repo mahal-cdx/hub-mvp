@@ -1,105 +1,45 @@
-# 05 — Pontuação, carteira e saques
+# 05 — Pontos, carteira e saques
 
-## Pontuação
+## Regras de pontuação
 
-As regras devem ser configuráveis pela administração.
+As regras são configuráveis, versionadas e possuem vigência. Exemplos de eventos:
 
-Exemplo:
+- lead cadastrado;
+- lead enriquecido;
+- projeto aprovado;
+- venda paga: bônus do Captador;
+- venda paga: bônus do Desenvolvedor;
+- venda paga: bônus do Comercial.
 
-| Evento | Pontos |
-|---|---:|
-| Lead cadastrado | 5 |
-| Lead qualificado | 10 |
-| Projeto criado | 15 |
-| Projeto aprovado | 20 |
-| Venda paga | 30 |
+Alterar uma regra cria uma nova versão. Créditos antigos preservam regra, evento, origem e quantidade aplicada.
 
-Os valores acima são apenas exemplos.
+## Extrato de pontos
 
-## Valor do ponto
+Pontos são a unidade da carteira. Cada lançamento imutável informa usuário, tipo, quantidade assinada, origem, regra, chave de idempotência e data.
 
-A administração define o valor monetário atual.
+Tipos iniciais:
 
-Exemplo:
+- crédito;
+- estorno;
+- reserva para saque;
+- liberação de reserva;
+- saque pago;
+- ajuste administrativo justificado.
 
-```text
-1 ponto = R$ 0,10
-```
+O saldo é derivado do extrato. Um campo materializado pode acelerar consultas, mas precisa ser reconciliável e não é a fonte única da verdade.
 
-Cada lançamento deve guardar o valor do ponto utilizado naquele momento.
+## Cotação
 
-Isso impede que uma alteração futura do valor do ponto altere retroativamente créditos antigos.
+A Administração publica cotações com valor em reais, início de vigência e motivo. Não existe valor fixo e uma nova cotação não altera créditos nem saques anteriores.
 
-## Eventos
+## Saque
 
-O sistema deve registrar a origem de cada crédito:
+Ao solicitar saque, o sistema executa uma única transação:
 
-```text
-evento
-usuário
-pontos
-valor do ponto
-valor em reais
-referência do evento
-data
-status
-```
+1. valida os pontos disponíveis;
+2. seleciona a cotação vigente;
+3. reserva os pontos;
+4. guarda pontos, cotação, valor unitário e total em reais;
+5. cria a solicitação e o lançamento de reserva.
 
-Exemplo:
-
-```text
-Venda #123 — pagamento confirmado
-
-Captador       +10 pontos
-Desenvolvedor  +20 pontos
-Comercial      +30 pontos
-```
-
-## Carteira
-
-O saldo exibido deve ser derivado de um extrato auditável.
-
-Não depender apenas de um campo `saldo` como fonte da verdade.
-
-Estados conceituais:
-
-```text
-pontos acumulados
-valor disponível
-valor em saque
-valor já pago
-```
-
-## Saques
-
-O usuário pode solicitar o saque do saldo disponível.
-
-Estados iniciais:
-
-```text
-solicitado
-em análise
-aprovado
-pago
-cancelado
-```
-
-O administrador controla a aprovação e o pagamento do saque.
-
-## Mercado Pago
-
-O primeiro MVP não precisa consultar automaticamente o Mercado Pago.
-
-Deve existir uma referência para o pagamento e uma confirmação administrativa.
-
-Futuro:
-
-```text
-Mercado Pago
-    ↓ webhook
-Pagamento confirmado
-    ↓
-Evento financeiro
-    ↓
-Pontuação
-```
+O valor fica congelado nessa solicitação. Cancelamento libera a reserva uma vez. Pagamento do saque exige referência ou comprovante único. Se uma venda for estornada depois do saque, o sistema registra a compensação e uma possível dívida, preservando todo o histórico.

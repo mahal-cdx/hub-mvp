@@ -1,76 +1,46 @@
-# Sales Foundation
+# Threeebs Hub MVP
 
-Base inicial independente para uma linha de processo comercial que futuramente poderá se transformar em uma API e integrar-se ao Threeebs.
+Módulo experimental para validar uma operação completa de captação, desenvolvimento e venda de projetos digitais.
 
-> **Estado:** Fundação / PoC. Este repositório contém apenas a infraestrutura inicial e a documentação do domínio. A aplicação ainda não foi implementada.
+> **Estado atual:** fundação. A aplicação ainda não foi implementada e as migrations existentes serão revistas antes da primeira execução persistente.
 
-## Objetivo
+## Processo do produto
 
-Construir uma operação simples:
+1. Um **Captador** cadastra um lead e recebe pontos conforme a qualidade das informações.
+2. Um **Desenvolvedor** assume a oportunidade, cria o projeto e informa o link de preview.
+3. Um **Administrador** revisa o projeto, solicita ajustes ou aprova.
+4. Após a aprovação, o administrador vincula preço e link de pagamento do Mercado Pago.
+5. Um usuário **Comercial** assume o atendimento e tenta concluir a venda.
+6. Quando o pagamento é confirmado, Captador, Desenvolvedor e Comercial recebem os pontos previstos nas regras.
+7. Os pontos podem ser convertidos em dinheiro conforme a cotação vigente no momento da solicitação de saque.
 
-**Captação → Oportunidade → Desenvolvimento → Projeto pronto → Comercial → Pagamento → Pontuação → Carteira → Saque**
+Todas as transições, revisões, contatos, créditos, reservas, estornos e saques devem possuir histórico auditável.
 
-O projeto é independente do Threeebs neste primeiro momento, mas a modelagem deve preservar compatibilidade futura com os identificadores e conceitos do `threeebs-edge`.
+## Direção arquitetural
 
-## Stack e arquitetura
+O Hub funciona como módulo independente durante o MVP:
 
-A base segue a mesma família tecnológica utilizada pelo `threeebs-edge`:
+- PHP 8.3 e Apache;
+- MySQL 8.4;
+- Redis 8;
+- Docker Compose;
+- aplicações separadas em `apps/admin`, `apps/users` e código comum em `apps/shared`;
+- banco, permissões, pontuação, auditoria e ciclo comercial próprios.
 
-- PHP 8.3 + Apache
-- MySQL 8.4
-- Redis 8
-- Docker Compose
-- estrutura preparada para migrations, seeds, storage e código compartilhado
-
-Existem dois ambientes PHP:
-
-1. **Admin** — administração da operação, usuários, permissões, regras de pontuação, pagamentos e saques.
-2. **Users** — ambiente operacional compartilhado por usuários com as funções **Captador, Desenvolvedor e Comercial**.
-
-Um mesmo usuário pode possuir mais de uma dessas funções. A atribuição das funções é controlada pelo administrador.
-
-## O que esta fundação contém
-
-- `docker-compose.yml` com os serviços iniciais;
-- `.env.example`;
-- estrutura de diretórios para aplicação, banco, infraestrutura e storage;
-- documentação de domínio em `docs/`;
-- nenhum segredo;
-- nenhuma regra de negócio implementada ainda.
+A arquitetura segue os padrões do [Threeebs Edge](https://github.com/mahal-cdx/threeebs-edge) para facilitar a integração futura. A ligação será feita por API e UUIDs estáveis. O Hub não deve acessar diretamente os schemas internos do Edge nem copiar suas credenciais.
 
 ## Documentação
 
-Comece por:
-
-1. [Visão geral do projeto](docs/01-PROJECT_OVERVIEW.md)
+1. [Visão do produto](docs/01-PROJECT_OVERVIEW.md)
 2. [Arquitetura](docs/02-ARCHITECTURE.md)
-3. [Usuários e funções](docs/03-USERS_AND_ROLES.md)
-4. [Processo comercial](docs/04-SALES_PROCESS.md)
-5. [Pontuação, carteira e saques](docs/05-SCORING_WALLET_WITHDRAWALS.md)
-6. [Modelo de dados inicial](docs/06-DATA_MODEL.md)
-7. [Compatibilidade com Threeebs Edge](docs/07-THREEEBS_COMPATIBILITY.md)
+3. [Usuários e papéis](docs/03-USERS_AND_ROLES.md)
+4. [Processo operacional](docs/04-SALES_PROCESS.md)
+5. [Pontos, carteira e saques](docs/05-SCORING_WALLET_WITHDRAWALS.md)
+6. [Modelo de dados](docs/06-DATA_MODEL.md)
+7. [Integração futura com o Edge](docs/07-THREEEBS_COMPATIBILITY.md)
 8. [Instalação local](docs/08-LOCAL_SETUP.md)
+9. [Plano de implementação](docs/09-IMPLEMENTATION_PLAN.md)
 
-## Referência arquitetural
+## Limites desta fase
 
-A referência tecnológica e estrutural é:
-
-https://github.com/mahal-cdx/threeebs-edge
-
-O projeto não copia a aplicação do Edge. Ele apenas adota a mesma linha de infraestrutura e organização, mantendo seu próprio domínio e banco.
-
-## Primeiros passos
-
-```bash
-cp .env.example .env
-docker compose up -d
-docker compose ps
-```
-
-Nesta etapa os containers podem subir sem uma aplicação funcional, pois as pastas de aplicação estão deliberadamente vazias.
-
-## Próxima fase
-
-A próxima implementação deve começar pela fundação de banco e autenticação, antes das telas de operação.
-
-Não implementar integração com Mercado Pago ou API do Threeebs antes de fechar o modelo interno de pagamentos, eventos de pontuação, carteira e saques.
+O repositório ainda não entrega autenticação, telas, API, integração com Mercado Pago, crédito de pontos ou saques funcionais. As migrations e seeds presentes representam uma primeira proposta e não devem ser executados em produção antes do rework descrito na documentação.

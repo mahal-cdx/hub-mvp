@@ -1,56 +1,37 @@
-# 07 — Compatibilidade com Threeebs Edge
+# 07 — Integração futura com Threeebs Edge
 
-Referência:
+Referência: [mahal-cdx/threeebs-edge](https://github.com/mahal-cdx/threeebs-edge).
 
-https://github.com/mahal-cdx/threeebs-edge
+## Responsabilidades
 
-## Estratégia
+O Edge continua como autoridade sobre identidade Threeebs, clientes e projetos oficiais. O Hub controla captação experimental, produção para venda, operação comercial, regras de pontos, cotação e saques.
 
-Este projeto é independente.
+## MVP independente
 
-Não deve importar o banco do Edge nem depender das aplicações do Edge para funcionar.
+O MVP usa contas locais e banco próprio. Ele precisa operar mesmo quando o Edge estiver indisponível. O usuário SQL do Hub não recebe acesso aos schemas internos do Edge.
 
-A compatibilidade será feita por contratos:
+Para preparar a integração, entidades relevantes aceitam referências externas:
 
-```text
-UUID
-timestamps
-status explícitos
-identificadores externos
-API futura
-```
+- `edge_usuario_uuid`;
+- `edge_cliente_uuid`;
+- `edge_projeto_uuid`;
+- origem e data de sincronização.
 
-## Relações futuras
+Essas referências só são preenchidas quando houver vínculo real e verificado.
 
-Conceitualmente:
+## Identidade futura
 
-```text
-Threeebs Identity
-        ↓
-usuario_uuid
+A autenticação futura usa um adaptador que valida a identidade ativa no Edge por API. O Hub mantém seu perfil operacional e seus papéis. O vínculo não pode ser criado apenas por igualdade de e-mail e o Hub nunca armazena a senha do Edge.
 
-Threeebs Control
-        ↓
-cliente_uuid
-projeto_uuid
-```
+## API futura
 
-O módulo comercial poderá futuramente consumir esses recursos por API.
+Contratos versionados devem permitir:
 
-## Banco
+- resolver e validar usuário;
+- consultar clientes e projetos autorizados;
+- promover um lead convertido para cliente;
+- publicar ou associar um projeto vendido;
+- receber eventos assinados com idempotência;
+- rastrear cada chamada por request ID.
 
-O banco deste projeto deve possuir apenas as entidades necessárias ao seu próprio domínio.
-
-Não duplicar toda a estrutura do Threeebs.
-
-## Integração futura
-
-```text
-Sales Foundation
-       │
-       │ API
-       ▼
-Threeebs
-```
-
-A integração deve ser implementada depois que o domínio interno estiver estável.
+A API aplica escopo mínimo e não expõe tabelas internas. Falhas de sincronização entram em fila para nova tentativa e não apagam o histórico local.
