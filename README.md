@@ -2,7 +2,7 @@
 
 Módulo experimental para validar uma operação completa de captação, desenvolvimento e venda de projetos digitais.
 
-> **Estado atual:** fundação. A aplicação ainda não foi implementada e as migrations existentes serão revistas antes da primeira execução persistente.
+> **Estado atual:** MVP operacional em evolução, com autenticação, fluxo de leads, desenvolvimento, comercial, pontuação e saques.
 
 ## Processo do produto
 
@@ -39,7 +39,7 @@ A arquitetura segue os padrões do [Threeebs Edge](https://github.com/mahal-cdx/
 6. [Modelo de dados](docs/06-DATA_MODEL.md)
 7. [Integração futura com o Edge](docs/07-THREEEBS_COMPATIBILITY.md)
 8. [Instalação local](docs/08-LOCAL_SETUP.md)
-9. [Plano de implementação](docs/09-IMPLEMENTATION_PLAN.md)
+9. [Plano de implementação](docs/09-IMPLEMENTATION_PLAN.md)\n10. [Enriquecimento de leads e referências visuais](docs/14-LEAD-ENRICHMENT-REFERENCES.md)
 
 ## Limites desta fase
 

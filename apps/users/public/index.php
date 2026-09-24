@@ -38,12 +38,36 @@ if ($method === 'GET' && $path === '/') {
     render('dashboard', ['title' => 'Meu ambiente', 'user' => $user, 'wallet' => $wallet]);
 }
 
+if ($method === 'GET' && preg_match('#^/references/([0-9a-f-]{36})$#', $path, $matches)) {
+    $user = require_operational_user();
+    send_reference_image($matches[1], $user, isset($_GET['download']));
+}
+
 if ($method === 'GET' && $path === '/leads') {
     $user = require_operational_user();
     if (!user_has_role($user, 'captador')) {
         render_error(403, 'Seu usuário não possui a função de captador.');
     }
-    render('leads', ['title' => 'Cadastro de leads', 'user' => $user, 'leads' => list_captor_leads((int) $user['id']), 'error' => null, 'success' => isset($_GET['saved']), 'values' => []]);
+
+    $editLead = null;
+    $error = null;
+    $editUuid = is_string($_GET['edit'] ?? null) ? $_GET['edit'] : '';
+    if ($editUuid !== '') {
+        $editLead = load_editable_lead($editUuid, (int) $user['id']);
+        if ($editLead === null) {
+            $error = 'Este cadastro não está mais aberto para edição.';
+        }
+    }
+
+    render('leads', [
+        'title' => 'Cadastro de leads',
+        'user' => $user,
+        'leads' => list_captor_leads((int) $user['id']),
+        'editLead' => $editLead,
+        'error' => $error,
+        'success' => isset($_GET['saved']),
+        'values' => $editLead ?? [],
+    ]);
 }
 
 if ($method === 'POST' && $path === '/leads') {
@@ -53,10 +77,65 @@ if ($method === 'POST' && $path === '/leads') {
     }
     require_csrf();
     try {
-        create_lead($_POST, $user);
+        $uploads = is_array($_FILES['reference_images'] ?? null) ? $_FILES['reference_images'] : [];
+        create_lead($_POST, $user, $uploads);
         redirect('/leads?saved=1');
     } catch (InvalidArgumentException $error) {
-        render('leads', ['title' => 'Cadastro de leads', 'user' => $user, 'leads' => list_captor_leads((int) $user['id']), 'error' => $error->getMessage(), 'success' => false, 'values' => $_POST], 422);
+        render('leads', [
+            'title' => 'Cadastro de leads',
+            'user' => $user,
+            'leads' => list_captor_leads((int) $user['id']),
+            'editLead' => null,
+            'error' => $error->getMessage(),
+            'success' => false,
+            'values' => $_POST,
+        ], 422);
+    }
+}
+
+if ($method === 'POST' && $path === '/leads/update') {
+    $user = require_operational_user();
+    if (!user_has_role($user, 'captador')) {
+        render_error(403, 'Seu usuário não possui a função de captador.');
+    }
+    require_csrf();
+    try {
+        $uploads = is_array($_FILES['reference_images'] ?? null) ? $_FILES['reference_images'] : [];
+        update_lead($_POST, $user, $uploads);
+        redirect('/leads?saved=1');
+    } catch (InvalidArgumentException $error) {
+        $editLead = load_editable_lead((string) ($_POST['lead_uuid'] ?? ''), (int) $user['id']);
+        render('leads', [
+            'title' => 'Cadastro de leads',
+            'user' => $user,
+            'leads' => list_captor_leads((int) $user['id']),
+            'editLead' => $editLead,
+            'error' => $error->getMessage(),
+            'success' => false,
+            'values' => $_POST + ($editLead ?? []),
+        ], 422);
+    }
+}
+
+if ($method === 'POST' && $path === '/leads/references/delete') {
+    $user = require_operational_user();
+    if (!user_has_role($user, 'captador')) {
+        render_error(403, 'Seu usuário não possui a função de captador.');
+    }
+    require_csrf();
+    try {
+        delete_lead_reference((string) ($_POST['reference_uuid'] ?? ''), $user);
+        redirect('/leads?edit=' . rawurlencode((string) ($_POST['lead_uuid'] ?? '')));
+    } catch (InvalidArgumentException $error) {
+        render('leads', [
+            'title' => 'Cadastro de leads',
+            'user' => $user,
+            'leads' => list_captor_leads((int) $user['id']),
+            'editLead' => null,
+            'error' => $error->getMessage(),
+            'success' => false,
+            'values' => [],
+        ], 422);
     }
 }
 
@@ -168,7 +247,7 @@ if ($method === 'POST' && $path === '/wallet/withdraw') {
     }
 }
 
-if (in_array($path, ['/login','/logout','/','/leads','/dev','/dev/claim','/dev/submit','/sales','/sales/claim','/sales/contact','/wallet','/wallet/withdraw'], true)) {
+if (in_array($path, ['/login','/logout','/','/leads','/leads/update','/leads/references/delete','/dev','/dev/claim','/dev/submit','/sales','/sales/claim','/sales/contact','/wallet','/wallet/withdraw'], true)) {
     header('Allow: GET, POST');
     render_error(405, 'Método não permitido.');
 }
