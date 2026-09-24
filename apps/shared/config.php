@@ -23,9 +23,14 @@ function config(?string $key = null): mixed
     if ($values === null) {
         $environment = env_value('APP_ENV', 'development');
         $appKey = env_value('APP_KEY');
+        $context = env_value('APP_CONTEXT', 'users');
 
         if (strlen($appKey) < 32) {
             throw new RuntimeException('APP_KEY deve possuir pelo menos 32 caracteres.');
+        }
+
+        if (!in_array($context, ['admin', 'users'], true)) {
+            throw new RuntimeException('APP_CONTEXT inválido.');
         }
 
         $sessionSecure = env_bool('SESSION_SECURE', $environment === 'production');
@@ -35,11 +40,12 @@ function config(?string $key = null): mixed
 
         $values = [
             'name' => env_value('APP_NAME', 'Threeebs Hub'),
+            'context' => $context,
             'environment' => $environment,
             'debug' => $environment !== 'production' && env_bool('APP_DEBUG', false),
             'url' => rtrim(env_value('APP_URL', 'http://localhost:6041'), '/'),
             'app_key' => $appKey,
-            'app_root' => env_value('ADMIN_APP_ROOT', '/var/www/app'),
+            'app_root' => env_value('APP_ROOT', '/var/www/app'),
             'session_secure' => $sessionSecure,
             'session_idle_timeout' => max(300, (int) env_value('SESSION_IDLE_TIMEOUT', '1800')),
             'session_absolute_timeout' => max(1800, (int) env_value('SESSION_ABSOLUTE_TIMEOUT', '28800')),

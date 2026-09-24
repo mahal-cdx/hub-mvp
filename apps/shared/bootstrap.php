@@ -9,7 +9,10 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/database.php';
 require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/view.php';
+require_once __DIR__ . '/audit.php';
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/user_management.php';
+require_once __DIR__ . '/workflow.php';
 
 date_default_timezone_set(env_value('TZ', 'UTC'));
 
