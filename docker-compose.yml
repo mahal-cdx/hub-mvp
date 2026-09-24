@@ -5,6 +5,12 @@ x-app-environment: &app-environment
   APP_ENV: ${APP_ENV:-development}
   APP_DEBUG: ${APP_DEBUG:-false}
   APP_NAME: ${APP_NAME:-Threeebs Hub}
+  APP_URL: ${APP_URL:-http://localhost:6041}
+  APP_KEY: ${APP_KEY:?defina APP_KEY}
+  SESSION_SECURE: ${SESSION_SECURE:-false}
+  SESSION_IDLE_TIMEOUT: ${SESSION_IDLE_TIMEOUT:-1800}
+  SESSION_ABSOLUTE_TIMEOUT: ${SESSION_ABSOLUTE_TIMEOUT:-28800}
+  TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
   DB_HOST: mysql
   DB_PORT: 3306
   DB_DATABASE: ${MYSQL_DATABASE:-hub}
@@ -43,10 +49,14 @@ services:
       <<: *app-environment
       APP_CONTEXT: admin
     volumes:
-      - ./apps/admin:/var/www/app
+      - ./apps/admin:/var/www/app:ro
       - ./apps/shared:/var/www/shared:ro
       - ./storage/uploads:/var/www/storage/uploads
       - ./storage/logs/admin:/var/log/apache2
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
 
   users:
     <<: *app-service
@@ -57,10 +67,14 @@ services:
       <<: *app-environment
       APP_CONTEXT: users
     volumes:
-      - ./apps/users:/var/www/app
+      - ./apps/users:/var/www/app:ro
       - ./apps/shared:/var/www/shared:ro
       - ./storage/uploads:/var/www/storage/uploads
       - ./storage/logs/users:/var/log/apache2
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
 
   mysql:
     image: mysql:8.4
