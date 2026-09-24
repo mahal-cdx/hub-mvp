@@ -21,7 +21,7 @@ $formTitle = $isEditing ? 'Editar cadastro aberto' : 'Cadastrar novo lead';
       <?php if ($isEditing): ?><a class="button button-secondary" href="/leads">Cancelar edição</a><?php endif; ?>
     </header>
 
-    <form class="lead-form" method="post" action="<?= e($formAction) ?>" enctype="multipart/form-data" data-lead-form data-existing-references="<?= $isEditing && ($editLead['references'] ?? []) !== [] ? '1' : '0' ?>">
+    <form class="lead-form" method="post" action="<?= e($formAction) ?>" enctype="multipart/form-data" data-lead-form data-existing-references="<?= $isEditing && ($editLead['references'] ?? []) !== [] ? '1' : '0' ?>" data-existing-reference-count="<?= $isEditing ? count($editLead['references'] ?? []) : 0 ?>">
       <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
       <?php if ($isEditing): ?><input type="hidden" name="lead_uuid" value="<?= e($editLead['uuid']) ?>"><?php endif; ?>
 
@@ -43,16 +43,48 @@ $formTitle = $isEditing ? 'Editar cadastro aberto' : 'Cadastrar novo lead';
       </div>
 
       <section class="reference-uploader">
-        <div><p class="section-kicker">Referências visuais</p><h3>Imagens do projeto</h3><p>Selecione várias imagens ou copie uma imagem e cole na área abaixo.</p></div>
-        <label class="file-picker">
-          <span>Selecionar imagens</span>
-          <input type="file" name="reference_images[]" accept="image/jpeg,image/png,image/webp,image/gif" multiple data-reference-input>
-        </label>
-        <div class="paste-zone" tabindex="0" data-image-paste>
-          <strong>Cole imagens aqui</strong>
-          <span>Use Ctrl+V ou ⌘+V. Máximo de 12 arquivos, 10 MB cada.</span>
+        <div>
+          <p class="section-kicker">Referências visuais</p>
+          <h3>Imagens do projeto</h3>
+          <p>Adicione até 10 imagens JPG, PNG, WEBP ou GIF, com no máximo 25 MB cada.</p>
+        </div>
+        <div class="reference-uploader-summary">
+          <button class="button button-secondary" type="button" data-image-dialog-open>Adicionar imagens</button>
+          <span data-reference-count>Nenhuma imagem selecionada</span>
         </div>
         <div class="reference-preview" data-reference-preview></div>
+
+        <dialog class="image-picker-dialog" data-image-dialog aria-labelledby="image-picker-title">
+          <div class="image-picker-panel">
+            <header class="image-picker-header">
+              <div>
+                <p class="section-kicker">Referências visuais</p>
+                <h3 id="image-picker-title">Adicionar imagens</h3>
+                <p>Escolha arquivos do dispositivo ou clique na área de colagem e use Ctrl+V.</p>
+              </div>
+              <button class="dialog-close" type="button" aria-label="Fechar" data-image-dialog-close>×</button>
+            </header>
+
+            <div class="image-picker-actions">
+              <label class="button button-secondary file-picker-button">
+                <span>Escolher arquivos</span>
+                <input type="file" name="reference_images[]" accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif" multiple data-reference-input>
+              </label>
+              <div class="paste-zone" tabindex="0" role="button" data-image-paste>
+                <strong>Colar imagem da área de transferência</strong>
+                <span>Clique aqui e pressione Ctrl+V ou ⌘+V</span>
+              </div>
+            </div>
+
+            <p class="upload-feedback" role="status" aria-live="polite" data-upload-feedback></p>
+            <div class="reference-preview reference-preview-dialog" data-reference-dialog-preview></div>
+
+            <footer class="image-picker-footer">
+              <span>Máximo de 10 arquivos, 25 MB cada.</span>
+              <button class="button button-primary" type="button" data-image-dialog-done>Adicionar selecionadas</button>
+            </footer>
+          </div>
+        </dialog>
       </section>
 
       <?php if ($isEditing && ($editLead['references'] ?? []) !== []): ?>

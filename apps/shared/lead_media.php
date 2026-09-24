@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-const LEAD_REFERENCE_MAX_FILES = 12;
-const LEAD_REFERENCE_MAX_BYTES = 10485760;
+const LEAD_REFERENCE_MAX_FILES = 10;
+const LEAD_REFERENCE_MAX_BYTES = 26214400;
 
 function normalize_uploaded_images(array $bag): array
 {
@@ -23,7 +23,12 @@ function normalize_uploaded_images(array $bag): array
             continue;
         }
         if ($error !== UPLOAD_ERR_OK) {
-            throw new InvalidArgumentException('Uma das imagens não pôde ser recebida.');
+            $message = match ($error) {
+                UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'Uma imagem excedeu o limite de 25 MB.',
+                UPLOAD_ERR_PARTIAL => 'Uma imagem foi recebida apenas parcialmente. Tente novamente.',
+                default => 'Uma das imagens não pôde ser recebida.',
+            };
+            throw new InvalidArgumentException($message);
         }
 
         $files[] = [
@@ -63,7 +68,7 @@ function store_lead_reference_images(
     $count = $connection->prepare('SELECT COUNT(*) FROM lead_referencia_arquivos WHERE lead_id = :lead_id');
     $count->execute(['lead_id' => $leadId]);
     if ((int) $count->fetchColumn() + count($files) > LEAD_REFERENCE_MAX_FILES) {
-        throw new InvalidArgumentException('Cada lead pode possuir no máximo 12 imagens de referência.');
+        throw new InvalidArgumentException('Cada lead pode possuir no máximo 10 imagens de referência.');
     }
 
     $allowed = [
@@ -71,6 +76,11 @@ function store_lead_reference_images(
         'image/png' => 'png',
         'image/webp' => 'webp',
         'image/gif' => 'gif',
+    ];
+    $mimeAliases = [
+        'image/pjpeg' => 'image/jpeg',
+        'image/x-png' => 'image/png',
+        'image/apng' => 'image/png',
     ];
     $directory = rtrim((string) config('upload_root'), '/') . '/leads/' . $leadUuid;
     if (!is_dir($directory) && !mkdir($directory, 0750, true) && !is_dir($directory)) {
@@ -89,13 +99,14 @@ function store_lead_reference_images(
         $finfo = new finfo(FILEINFO_MIME_TYPE);
         foreach ($files as $file) {
             if ($file['size'] < 1 || $file['size'] > LEAD_REFERENCE_MAX_BYTES) {
-                throw new InvalidArgumentException('Cada imagem deve possuir no máximo 10 MB.');
+                throw new InvalidArgumentException('Cada imagem deve possuir no máximo 25 MB.');
             }
             if (!is_uploaded_file($file['tmp_name'])) {
                 throw new InvalidArgumentException('Upload de imagem inválido.');
             }
 
-            $mime = (string) $finfo->file($file['tmp_name']);
+            $detectedMime = strtolower((string) $finfo->file($file['tmp_name']));
+            $mime = $mimeAliases[$detectedMime] ?? $detectedMime;
             if (!isset($allowed[$mime])) {
                 throw new InvalidArgumentException('Use apenas imagens JPG, PNG, WEBP ou GIF.');
             }

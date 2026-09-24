@@ -7,8 +7,8 @@ Permitir que o captador construa um cadastro progressivamente mais rico enquanto
 ## Regras do cadastro
 
 - `link da bio` é opcional e aceita apenas URLs HTTP/HTTPS válidas;
-- é possível selecionar ou colar até 12 imagens JPG, PNG, WEBP ou GIF por envio;
-- cada imagem pode ter no máximo 10 MB e recebe nome aleatório no armazenamento privado;
+- é possível selecionar ou colar até 10 imagens JPG, PNG, WEBP ou GIF por envio;
+- cada imagem pode ter no máximo 25 MB e recebe nome aleatório no armazenamento privado;
 - o captador pode editar dados e remover referências somente enquanto a oportunidade está aberta e sem desenvolvedor;
 - após a assunção, o cadastro fica congelado para preservar o contexto usado pelo desenvolvedor.
 
@@ -65,7 +65,7 @@ A separação evita que uma reprovação técnica descarte um lead que ainda pod
 
 ## Implantação
 
-A migration `007_add_lead_bio_and_references.sql` é incremental. Não é necessário apagar os volumes do MVP:
+As migrations `007_add_lead_bio_and_references.sql` e `008_increase_lead_reference_limits.sql` são incrementais. Não é necessário apagar os volumes do MVP:
 
 ```bash
 ./scripts/migrate.sh

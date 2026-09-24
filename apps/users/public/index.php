@@ -7,6 +7,24 @@ require '/var/www/shared/bootstrap.php';
 $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 $path = route_path();
 
+if ($method === 'POST') {
+    $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+    $configuredPostMax = trim((string) ini_get('post_max_size'));
+    $unit = strtolower(substr($configuredPostMax, -1));
+    $postMaxBytes = (int) $configuredPostMax;
+    if ($unit === 'g') {
+        $postMaxBytes *= 1024 * 1024 * 1024;
+    } elseif ($unit === 'm') {
+        $postMaxBytes *= 1024 * 1024;
+    } elseif ($unit === 'k') {
+        $postMaxBytes *= 1024;
+    }
+
+    if ($contentLength > 0 && $postMaxBytes > 0 && $contentLength > $postMaxBytes && $_POST === []) {
+        render_error(413, 'O envio ultrapassou o limite permitido. Envie no máximo 10 imagens de 25 MB cada.');
+    }
+}
+
 if ($method === 'GET' && $path === '/login') {
     if (auth_check()) {
         redirect('/');
