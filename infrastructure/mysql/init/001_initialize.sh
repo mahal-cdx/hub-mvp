@@ -27,6 +27,11 @@ for migration_path in "${database_dir}"/migrations/*.sql; do
 done
 
 if [[ "${LOAD_DEMO_SEEDS:-false}" == "true" ]]; then
+    if [[ "${APP_ENV:-development}" == "production" ]]; then
+        echo "Seeds de demonstração são proibidos em production." >&2
+        exit 1
+    fi
+
     echo "Carregando seeds de demonstração"
     for seed_path in "${database_dir}"/seeds/*.sql; do
         apply_sql "${seed_path}"
