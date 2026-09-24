@@ -138,7 +138,73 @@ if ($method === 'POST' && $path === '/projects/review') {
     }
 }
 
-if (in_array($path, ['/login','/logout','/users','/users/new','/projects','/projects/review','/'], true)) {
+if ($method === 'GET' && $path === '/finance') {
+    $user = require_admin();
+    render('finance', [
+        'title' => 'Pontos e pagamentos',
+        'user' => $user,
+        'rules' => list_scoring_rules(),
+        'quote' => current_point_quote(),
+        'payments' => list_pending_payments(),
+        'error' => null,
+        'success' => isset($_GET['saved']),
+    ]);
+}
+
+if ($method === 'POST' && in_array($path, ['/finance/rules','/finance/quote','/finance/payment'], true)) {
+    $user = require_admin();
+    require_csrf();
+    try {
+        if ($path === '/finance/rules') {
+            save_scoring_rule($_POST, $user);
+        } elseif ($path === '/finance/quote') {
+            save_point_quote($_POST, $user);
+        } else {
+            confirm_manual_payment($_POST, $user);
+        }
+        redirect('/finance?saved=1');
+    } catch (InvalidArgumentException $error) {
+        render('finance', [
+            'title' => 'Pontos e pagamentos',
+            'user' => $user,
+            'rules' => list_scoring_rules(),
+            'quote' => current_point_quote(),
+            'payments' => list_pending_payments(),
+            'error' => $error->getMessage(),
+            'success' => false,
+        ], 422);
+    }
+}
+
+if ($method === 'GET' && $path === '/withdrawals') {
+    $user = require_admin();
+    render('withdrawals', [
+        'title' => 'Controle de saques',
+        'user' => $user,
+        'withdrawals' => list_admin_withdrawals(),
+        'error' => null,
+        'success' => isset($_GET['saved']),
+    ]);
+}
+
+if ($method === 'POST' && $path === '/withdrawals/action') {
+    $user = require_admin();
+    require_csrf();
+    try {
+        transition_withdrawal($_POST, $user);
+        redirect('/withdrawals?saved=1');
+    } catch (InvalidArgumentException $error) {
+        render('withdrawals', [
+            'title' => 'Controle de saques',
+            'user' => $user,
+            'withdrawals' => list_admin_withdrawals(),
+            'error' => $error->getMessage(),
+            'success' => false,
+        ], 422);
+    }
+}
+
+if (in_array($path, ['/login','/logout','/users','/users/new','/projects','/projects/review','/finance','/finance/rules','/finance/quote','/finance/payment','/withdrawals','/withdrawals/action','/'], true)) {
     header('Allow: GET, POST');
     render_error(405, 'Método não permitido.');
 }

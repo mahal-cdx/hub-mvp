@@ -132,7 +132,43 @@ if ($method === 'POST' && $path === '/sales/contact') {
     }
 }
 
-if (in_array($path, ['/login','/logout','/','/leads','/dev','/dev/claim','/dev/submit','/sales','/sales/claim','/sales/contact'], true)) {
+if ($method === 'GET' && $path === '/wallet') {
+    $user = require_operational_user();
+    render('wallet', [
+        'title' => 'Pontos e saques',
+        'user' => $user,
+        'wallet' => wallet_summary((int) $user['id']),
+        'quote' => current_point_quote(),
+        'history' => list_user_point_history((int) $user['id']),
+        'withdrawals' => list_user_withdrawals((int) $user['id']),
+        'requestToken' => uuid_v4(),
+        'error' => null,
+        'success' => isset($_GET['saved']),
+    ]);
+}
+
+if ($method === 'POST' && $path === '/wallet/withdraw') {
+    $user = require_operational_user();
+    require_csrf();
+    try {
+        request_withdrawal($_POST, $user);
+        redirect('/wallet?saved=1');
+    } catch (InvalidArgumentException $error) {
+        render('wallet', [
+            'title' => 'Pontos e saques',
+            'user' => $user,
+            'wallet' => wallet_summary((int) $user['id']),
+            'quote' => current_point_quote(),
+            'history' => list_user_point_history((int) $user['id']),
+            'withdrawals' => list_user_withdrawals((int) $user['id']),
+            'requestToken' => (string) ($_POST['request_token'] ?? uuid_v4()),
+            'error' => $error->getMessage(),
+            'success' => false,
+        ], 422);
+    }
+}
+
+if (in_array($path, ['/login','/logout','/','/leads','/dev','/dev/claim','/dev/submit','/sales','/sales/claim','/sales/contact','/wallet','/wallet/withdraw'], true)) {
     header('Allow: GET, POST');
     render_error(405, 'Método não permitido.');
 }

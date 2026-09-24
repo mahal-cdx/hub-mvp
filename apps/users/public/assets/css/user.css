@@ -144,3 +144,29 @@ a { color: inherit; }
 .item-card small{display:block;color:var(--muted);margin-top:.25rem}
 .app-main{width:min(1180px,calc(100% - 2rem));margin:0 auto;padding:2rem 0 4rem}
 @media(max-width:850px){.topbar{align-items:flex-start;flex-wrap:wrap}.main-nav{order:3;width:100%}.user-row,.two-columns{grid-template-columns:1fr}.review-form,.form-grid{grid-template-columns:1fr}.page-head{display:grid}.metric-card{min-width:0}}
+
+
+/* Finance and payouts */
+.finance-section{margin-top:1rem}
+.finance-rule{display:grid;grid-template-columns:minmax(12rem,1fr) 8rem auto;align-items:end}
+.finance-rule input{width:100%}
+.quote-highlight,.withdraw-preview{border:1px solid rgba(111,255,205,.28);background:rgba(111,255,205,.07);border-radius:1rem;padding:1rem;margin:1rem 0}
+.quote-highlight span,.quote-highlight small{display:block;color:var(--muted)}
+.quote-highlight strong{display:block;font-size:1.8rem;margin:.3rem 0}
+.wallet-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;margin-bottom:1rem}
+.withdrawal-card{display:grid;gap:1rem}
+.withdrawal-head{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start}
+.withdrawal-head h2{margin:.5rem 0 .2rem}
+.withdrawal-value{text-align:right}
+.withdrawal-value strong,.withdrawal-value small{display:block}
+.withdrawal-value strong{font-size:1.5rem}
+.withdrawal-value small{color:var(--muted);margin-top:.25rem}
+.details-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:.8rem;margin:0}
+.details-grid div{border:1px solid var(--border);border-radius:.75rem;padding:.8rem}
+.details-grid dt{color:var(--muted);font-size:.8rem;margin-bottom:.35rem}
+.details-grid dd{margin:0;overflow-wrap:anywhere}
+.button-danger{border-color:rgba(255,99,99,.4);background:rgba(255,99,99,.1);color:#ffb8b8}
+.points-positive{color:#7dffbd}
+.points-negative{color:#ffb8b8}
+code{color:var(--text);font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+@media(max-width:850px){.finance-rule{grid-template-columns:1fr}.wallet-summary{grid-template-columns:1fr}.withdrawal-head{display:grid}.withdrawal-value{text-align:left}}

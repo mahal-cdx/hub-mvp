@@ -145,6 +145,7 @@ function create_lead(array $input, array $actor): string
             'completude' => $completeness,
             'oportunidade_uuid' => $opportunityUuid,
         ]);
+        award_points($connection, (int) $actor['id'], 'lead_cadastrado', 'lead', $leadUuid, $actor['uuid']);
         $connection->commit();
         return $leadUuid;
     } catch (Throwable $error) {
@@ -337,7 +338,8 @@ function review_project(array $input, array $actor): void
     $connection->beginTransaction();
     try {
         $find = $connection->prepare(
-            "SELECT r.id revisao_id, r.decisao, p.id projeto_id, p.uuid projeto_uuid, p.oportunidade_id
+            "SELECT r.id revisao_id, r.decisao, p.id projeto_id, p.uuid projeto_uuid, p.oportunidade_id,
+                    p.desenvolvedor_usuario_id
              FROM projeto_revisoes r
              INNER JOIN projetos p ON p.id = r.projeto_id
              WHERE r.uuid = :uuid
@@ -398,6 +400,14 @@ function review_project(array $input, array $actor): void
                 "INSERT INTO vendas (uuid, oferta_id, status) VALUES (:uuid, :offer_id, 'disponivel')"
             );
             $sale->execute(['uuid' => uuid_v4(), 'offer_id' => $connection->lastInsertId()]);
+            award_points(
+                $connection,
+                (int) $review['desenvolvedor_usuario_id'],
+                'projeto_aprovado',
+                'projeto',
+                (string) $review['projeto_uuid'],
+                $actor['uuid']
+            );
         } elseif ($decision === 'ajustes') {
             $connection->prepare("UPDATE projetos SET status = 'ajustes' WHERE id = :id")
                 ->execute(['id' => $review['projeto_id']]);
