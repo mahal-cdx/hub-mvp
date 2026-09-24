@@ -56,7 +56,8 @@ function start_secure_session(): void
     ini_set('session.sid_bits_per_character', '6');
     ini_set('session.gc_maxlifetime', (string) config('session_absolute_timeout'));
 
-    session_name('hub_admin_session');
+    $context = preg_replace('/[^a-z0-9_]/', '', strtolower((string) config('context'))) ?: 'app';
+    session_name('hub_' . $context . '_session');
     session_set_cookie_params([
         'lifetime' => 0,
         'path' => '/',
@@ -177,4 +178,11 @@ function safe_return_path(mixed $value, string $fallback = '/'): string
 
     $path = parse_url($value, PHP_URL_PATH);
     return is_string($path) && str_starts_with($path, '/') ? $path : $fallback;
+}
+
+function require_csrf(): void
+{
+    if (!csrf_verify($_POST['_csrf'] ?? null)) {
+        render_error(403, 'A sessão do formulário expirou. Atualize a página e tente novamente.');
+    }
 }

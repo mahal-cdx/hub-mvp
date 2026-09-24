@@ -18,33 +18,64 @@ function auth_check(): bool
     return auth_user() !== null;
 }
 
-function require_admin(): array
+function load_active_user(PDO $connection, int $id, string $uuid): ?array
 {
-    $user = auth_user();
-    if ($user === null || !in_array('administrador', $user['roles'] ?? [], true)) {
-        redirect('/login');
-    }
-
-    $statement = db()->prepare(
-        "SELECT 1
+    $statement = $connection->prepare(
+        "SELECT u.id, u.uuid, u.nome, u.email, GROUP_CONCAT(f.chave ORDER BY f.chave SEPARATOR ',') roles
          FROM usuarios u
          INNER JOIN usuario_funcoes uf ON uf.usuario_id = u.id
          INNER JOIN funcoes f ON f.id = uf.funcao_id
-         WHERE u.id = :id
-           AND u.uuid = :uuid
-           AND u.status = 'ativo'
-           AND f.chave = 'administrador'
+         WHERE u.id = :id AND u.uuid = :uuid AND u.status = 'ativo'
+         GROUP BY u.id, u.uuid, u.nome, u.email
          LIMIT 1"
     );
-    $statement->execute(['id' => $user['id'], 'uuid' => $user['uuid']]);
+    $statement->execute(['id' => $id, 'uuid' => $uuid]);
+    $row = $statement->fetch();
 
-    if ($statement->fetchColumn() === false) {
-        record_auth_audit('auth.sessao_revogada', $user['uuid']);
+    if (!is_array($row)) {
+        return null;
+    }
+
+    return [
+        'id' => (int) $row['id'],
+        'uuid' => $row['uuid'],
+        'name' => $row['nome'],
+        'email' => $row['email'],
+        'roles' => array_values(array_filter(explode(',', (string) $row['roles']))),
+    ];
+}
+
+function require_roles(array $requiredRoles): array
+{
+    $sessionUser = auth_user();
+    if ($sessionUser === null) {
+        redirect('/login');
+    }
+
+    $user = load_active_user(db(), (int) $sessionUser['id'], (string) $sessionUser['uuid']);
+    if ($user === null || array_intersect($requiredRoles, $user['roles']) === []) {
+        record_auth_audit('auth.sessao_revogada', $sessionUser['uuid'] ?? null);
         clear_session();
         redirect('/login');
     }
 
+    $_SESSION['auth_user'] = $user;
     return $user;
+}
+
+function require_admin(): array
+{
+    return require_roles(['administrador']);
+}
+
+function require_operational_user(): array
+{
+    return require_roles(['captador', 'desenvolvedor', 'comercial']);
+}
+
+function user_has_role(array $user, string $role): bool
+{
+    return in_array($role, $user['roles'] ?? [], true);
 }
 
 function login_is_blocked(PDO $connection, string $identifierHash, string $ipHash): bool
@@ -56,10 +87,7 @@ function login_is_blocked(PDO $connection, string $identifierHash, string $ipHas
       WHERE ocorrido_em >= (CURRENT_TIMESTAMP(6) - INTERVAL " . LOGIN_WINDOW_MINUTES . " MINUTE)";
 
     $statement = $connection->prepare($sql);
-    $statement->execute([
-        'identifier_hash' => $identifierHash,
-        'ip_hash' => $ipHash,
-    ]);
+    $statement->execute(['identifier_hash' => $identifierHash, 'ip_hash' => $ipHash]);
     $counts = $statement->fetch() ?: [];
 
     return (int) ($counts['identifier_failures'] ?? 0) >= LOGIN_IDENTIFIER_LIMIT
@@ -77,14 +105,14 @@ function record_login_attempt(
         'INSERT INTO auth_tentativas
             (uuid, usuario_id, identificador_hash, ip_hash, resultado, request_id)
          VALUES
-            (:uuid, :usuario_id, :identificador_hash, :ip_hash, :resultado, :request_id)'
+            (:uuid, :usuario_id, :identifier_hash, :ip_hash, :result, :request_id)'
     );
     $statement->execute([
         'uuid' => uuid_v4(),
         'usuario_id' => $userId,
-        'identificador_hash' => $identifierHash,
+        'identifier_hash' => $identifierHash,
         'ip_hash' => $ipHash,
-        'resultado' => $result,
+        'result' => $result,
         'request_id' => request_id(),
     ]);
 }
@@ -92,32 +120,23 @@ function record_login_attempt(
 function record_auth_audit(string $action, ?string $userUuid, array $metadata = []): void
 {
     try {
-        $statement = db()->prepare(
-            'INSERT INTO eventos_auditoria
-                (uuid, ator_origem, ator_usuario_uuid, acao, entidade_tipo, entidade_uuid, request_id, ip_hash, metadata_json)
-             VALUES
-                (:uuid, :ator_origem, :ator_usuario_uuid, :acao, :entidade_tipo, :entidade_uuid, :request_id, :ip_hash, :metadata_json)'
+        audit_event(
+            db(),
+            $action,
+            'sessao_' . config('context'),
+            $userUuid ?? '00000000-0000-0000-0000-000000000000',
+            $userUuid,
+            $metadata + ['contexto' => config('context')]
         );
-        $statement->execute([
-            'uuid' => uuid_v4(),
-            'ator_origem' => $userUuid === null ? 'sistema' : 'usuario',
-            'ator_usuario_uuid' => $userUuid,
-            'acao' => $action,
-            'entidade_tipo' => 'sessao_admin',
-            'entidade_uuid' => $userUuid ?? '00000000-0000-0000-0000-000000000000',
-            'request_id' => request_id(),
-            'ip_hash' => keyed_hash('ip', client_ip()),
-            'metadata_json' => json_encode($metadata, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
-        ]);
     } catch (Throwable $error) {
         error_log('Falha ao registrar auditoria de autenticação: ' . $error->getMessage());
     }
 }
 
-function attempt_admin_login(string $email, string $password): array
+function attempt_login(string $email, string $password, array $allowedRoles): array
 {
     $normalizedEmail = normalize_email($email);
-    $identifierHash = keyed_hash('login_identifier', $normalizedEmail);
+    $identifierHash = keyed_hash('login_identifier:' . config('context'), $normalizedEmail);
     $ipHash = keyed_hash('ip', client_ip());
     $connection = db();
 
@@ -137,40 +156,28 @@ function attempt_admin_login(string $email, string $password): array
     }
 
     $statement = $connection->prepare(
-        "SELECT
-            u.id, u.uuid, u.nome, u.email, u.senha_hash, u.status,
-            EXISTS(
-                SELECT 1
-                FROM usuario_funcoes uf
-                INNER JOIN funcoes f ON f.id = uf.funcao_id
-                WHERE uf.usuario_id = u.id AND f.chave = 'administrador'
-            ) AS is_admin
+        "SELECT u.id, u.uuid, u.nome, u.email, u.senha_hash, u.status,
+                GROUP_CONCAT(f.chave ORDER BY f.chave SEPARATOR ',') roles
          FROM usuarios u
+         LEFT JOIN usuario_funcoes uf ON uf.usuario_id = u.id
+         LEFT JOIN funcoes f ON f.id = uf.funcao_id
          WHERE u.email = :email
+         GROUP BY u.id, u.uuid, u.nome, u.email, u.senha_hash, u.status
          LIMIT 1"
     );
     $statement->execute(['email' => $normalizedEmail]);
-    $user = $statement->fetch();
-    $hash = is_array($user) && is_string($user['senha_hash'] ?? null)
-        ? $user['senha_hash']
+    $row = $statement->fetch();
+    $hash = is_array($row) && is_string($row['senha_hash'] ?? null)
+        ? $row['senha_hash']
         : DUMMY_PASSWORD_HASH;
-    $passwordValid = password_verify($password, $hash);
+    $validPassword = password_verify($password, $hash);
+    $roles = is_array($row) ? array_values(array_filter(explode(',', (string) $row['roles']))) : [];
+    $authorized = array_intersect($allowedRoles, $roles) !== [];
 
-    if (!$passwordValid || !is_array($user) || $user['status'] !== 'ativo') {
-        record_login_attempt(
-            $connection,
-            $identifierHash,
-            $ipHash,
-            'credencial_invalida',
-            is_array($user) ? (int) $user['id'] : null
-        );
-        record_auth_audit('auth.login_falhou', is_array($user) ? $user['uuid'] : null, ['motivo' => 'credencial_invalida']);
-        return ['ok' => false, 'message' => 'E-mail ou senha inválidos.'];
-    }
-
-    if ((int) $user['is_admin'] !== 1) {
-        record_login_attempt($connection, $identifierHash, $ipHash, 'sem_permissao', (int) $user['id']);
-        record_auth_audit('auth.login_falhou', $user['uuid'], ['motivo' => 'sem_permissao']);
+    if (!$validPassword || !is_array($row) || $row['status'] !== 'ativo' || !$authorized) {
+        $result = $validPassword && is_array($row) && !$authorized ? 'sem_permissao' : 'credencial_invalida';
+        record_login_attempt($connection, $identifierHash, $ipHash, $result, is_array($row) ? (int) $row['id'] : null);
+        record_auth_audit('auth.login_falhou', is_array($row) ? $row['uuid'] : null, ['motivo' => $result]);
         return ['ok' => false, 'message' => 'E-mail ou senha inválidos.'];
     }
 
@@ -178,12 +185,12 @@ function attempt_admin_login(string $email, string $password): array
     try {
         if (password_needs_rehash($hash, PASSWORD_DEFAULT)) {
             $rehash = $connection->prepare('UPDATE usuarios SET senha_hash = :hash WHERE id = :id');
-            $rehash->execute(['hash' => password_hash($password, PASSWORD_DEFAULT), 'id' => $user['id']]);
+            $rehash->execute(['hash' => password_hash($password, PASSWORD_DEFAULT), 'id' => $row['id']]);
         }
 
         $update = $connection->prepare('UPDATE usuarios SET ultimo_login_em = CURRENT_TIMESTAMP(6) WHERE id = :id');
-        $update->execute(['id' => $user['id']]);
-        record_login_attempt($connection, $identifierHash, $ipHash, 'sucesso', (int) $user['id']);
+        $update->execute(['id' => $row['id']]);
+        record_login_attempt($connection, $identifierHash, $ipHash, 'sucesso', (int) $row['id']);
         $connection->commit();
     } catch (Throwable $error) {
         if ($connection->inTransaction()) {
@@ -194,21 +201,32 @@ function attempt_admin_login(string $email, string $password): array
 
     session_regenerate_id(true);
     $_SESSION['auth_user'] = [
-        'id' => (int) $user['id'],
-        'uuid' => $user['uuid'],
-        'name' => $user['nome'],
-        'email' => $user['email'],
-        'roles' => ['administrador'],
+        'id' => (int) $row['id'],
+        'uuid' => $row['uuid'],
+        'name' => $row['nome'],
+        'email' => $row['email'],
+        'roles' => $roles,
     ];
     $_SESSION['_created_at'] = time();
     $_SESSION['_last_activity'] = time();
+    $_SESSION['_rotated_at'] = time();
     unset($_SESSION['_csrf']);
-    record_auth_audit('auth.login_sucesso', $user['uuid']);
+    record_auth_audit('auth.login_sucesso', $row['uuid']);
 
     return ['ok' => true, 'message' => null];
 }
 
-function logout_admin(): void
+function attempt_admin_login(string $email, string $password): array
+{
+    return attempt_login($email, $password, ['administrador']);
+}
+
+function attempt_user_login(string $email, string $password): array
+{
+    return attempt_login($email, $password, ['captador', 'desenvolvedor', 'comercial']);
+}
+
+function logout_user(): void
 {
     $user = auth_user();
     if ($user !== null) {
