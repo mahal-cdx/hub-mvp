@@ -158,34 +158,37 @@ function create_lead(array $input, array $actor): string
 
 function list_developer_work(int $userId): array
 {
+    // Oportunidades abertas retornam somente metadados operacionais.
+    // Dados do lead são liberados apenas depois da atribuição atômica.
     $open = db()->query(
-        "SELECT o.uuid, o.titulo, o.descricao, o.created_at, l.nome lead_nome, l.bio,
-                l.referencias, l.observacoes,
-                GROUP_CONCAT(CONCAT(lc.tipo, ': ', lc.valor) ORDER BY lc.tipo SEPARATOR ' | ') contatos
+        "SELECT o.uuid, o.created_at
          FROM oportunidades o
-         INNER JOIN leads l ON l.id = o.lead_id
-         LEFT JOIN lead_contatos lc ON lc.lead_id = l.id
          WHERE o.status = 'aberta' AND o.desenvolvedor_usuario_id IS NULL
-         GROUP BY o.id, o.uuid, o.titulo, o.descricao, o.created_at, l.nome, l.bio, l.referencias, l.observacoes
          ORDER BY o.created_at
          LIMIT 50"
     )->fetchAll();
 
     $mineStatement = db()->prepare(
-        "SELECT o.uuid, o.titulo, o.status, o.assumida_em, l.nome lead_nome,
-                p.uuid projeto_uuid, p.nome projeto_nome, p.url_preview, p.status projeto_status
+        "SELECT o.uuid, o.titulo, o.descricao oportunidade_descricao, o.status, o.assumida_em,
+                l.nome lead_nome, l.bio, l.referencias, l.observacoes,
+                p.uuid projeto_uuid, p.nome projeto_nome, p.descricao projeto_descricao,
+                p.url_preview, p.status projeto_status,
+                GROUP_CONCAT(CONCAT(lc.tipo, ': ', lc.valor) ORDER BY lc.tipo SEPARATOR ' | ') contatos
          FROM oportunidades o
          INNER JOIN leads l ON l.id = o.lead_id
+         LEFT JOIN lead_contatos lc ON lc.lead_id = l.id
          LEFT JOIN projetos p ON p.oportunidade_id = o.id
          WHERE o.desenvolvedor_usuario_id = :user_id
            AND o.status NOT IN ('vendida','perdida','cancelada')
+         GROUP BY o.id, o.uuid, o.titulo, o.descricao, o.status, o.assumida_em,
+                  l.nome, l.bio, l.referencias, l.observacoes,
+                  p.uuid, p.nome, p.descricao, p.url_preview, p.status
          ORDER BY o.updated_at DESC"
     );
     $mineStatement->execute(['user_id' => $userId]);
 
     return ['open' => $open, 'mine' => $mineStatement->fetchAll()];
 }
-
 function claim_opportunity(string $uuid, array $actor): void
 {
     $connection = db();
@@ -434,8 +437,18 @@ function review_project(array $input, array $actor): void
 
 function list_commercial_sales(int $userId): array
 {
-    $statement = db()->prepare(
-        "SELECT v.uuid, v.status, v.assumida_em, o.valor_brl, o.link_pagamento,
+    // A fila aberta não carrega lead, contatos, valor, preview ou pagamento.
+    $available = db()->query(
+        "SELECT v.uuid, v.status, v.created_at
+         FROM vendas v
+         WHERE v.status = 'disponivel' AND v.comercial_usuario_id IS NULL
+         ORDER BY v.created_at
+         LIMIT 50"
+    )->fetchAll();
+
+    $mineStatement = db()->prepare(
+        "SELECT v.uuid, v.status, v.assumida_em, v.updated_at,
+                o.valor_brl, o.link_pagamento,
                 p.nome projeto_nome, p.url_preview, l.nome lead_nome,
                 GROUP_CONCAT(CONCAT(lc.tipo, ': ', lc.valor) ORDER BY lc.tipo SEPARATOR ' | ') contatos
          FROM vendas v
@@ -444,15 +457,16 @@ function list_commercial_sales(int $userId): array
          INNER JOIN oportunidades op ON op.id = p.oportunidade_id
          INNER JOIN leads l ON l.id = op.lead_id
          LEFT JOIN lead_contatos lc ON lc.lead_id = l.id
-         WHERE v.status = 'disponivel' OR v.comercial_usuario_id = :user_id
-         GROUP BY v.id, v.uuid, v.status, v.assumida_em, o.valor_brl, o.link_pagamento,
-                  p.nome, p.url_preview, l.nome
-         ORDER BY (v.comercial_usuario_id = :user_id_order) DESC, v.created_at"
+         WHERE v.comercial_usuario_id = :user_id
+           AND v.status IN ('em_atendimento','aguardando_pagamento')
+         GROUP BY v.id, v.uuid, v.status, v.assumida_em, v.updated_at,
+                  o.valor_brl, o.link_pagamento, p.nome, p.url_preview, l.nome
+         ORDER BY v.updated_at DESC"
     );
-    $statement->execute(['user_id' => $userId, 'user_id_order' => $userId]);
-    return $statement->fetchAll();
-}
+    $mineStatement->execute(['user_id' => $userId]);
 
+    return ['available' => $available, 'mine' => $mineStatement->fetchAll()];
+}
 function claim_sale(string $uuid, array $actor): void
 {
     $connection = db();
