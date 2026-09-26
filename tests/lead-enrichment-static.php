@@ -1,0 +1,63 @@
+<?php
+
+declare(strict_types=1);
+
+$root = dirname(__DIR__);
+$read = static fn (string $path): string => file_get_contents($root . '/' . $path) ?: '';
+$assert = static function (bool $condition, string $message): void {
+    if (!$condition) {
+        fwrite(STDERR, "FALHOU: {$message}\n");
+        exit(1);
+    }
+};
+
+$migration = $read('database/migrations/007_add_lead_bio_and_references.sql');
+$operationsMigration = $read('database/migrations/009_add_operational_limits_extras_finance.sql');
+$limitsMigration = $read('database/migrations/008_increase_lead_reference_limits.sql');
+$workflow = $read('apps/shared/workflow.php');
+$finance = $read('apps/shared/finance.php');
+$security = $read('apps/shared/security.php');
+$media = $read('apps/shared/lead_media.php');
+$routes = $read('apps/users/public/index.php');
+$leads = $read('apps/users/views/leads.php');
+$developer = $read('apps/users/views/developer.php');
+$sales = $read('apps/users/views/sales.php');
+$admin = $read('apps/admin/views/projects.php');
+$adminFinance = $read('apps/admin/views/finance.php');
+$javascript = $read('apps/users/public/assets/js/user.js');
+$stylesheet = $read('apps/users/public/assets/css/user.css');
+$layout = $read('apps/users/views/layout.php');
+$dockerfile = $read('infrastructure/apache/Dockerfile');
+$compose = $read('docker-compose.yml');
+
+$assert(str_contains($migration, 'bio_url') && str_contains($migration, 'lead_referencia_arquivos'), 'migration de bio e referências');
+$assert(!preg_match('/name=["\']temperature["\']/', $leads), 'temperatura não pode ser selecionada manualmente');
+$assert(str_contains($workflow, "'referencias_visuais' => \$hasReferences ? 10 : 0"), 'referências entram na completude');
+$assert(str_contains($workflow, "\$temperature = \$completeness >= 75"), 'temperatura deriva da completude');
+$assert(str_contains($workflow, "o.status = 'aberta'") && str_contains($workflow, 'o.desenvolvedor_usuario_id IS NULL'), 'edição limitada ao lead aberto');
+$assert(str_contains($media, 'finfo') && str_contains($media, '26214400') && str_contains($media, 'LEAD_REFERENCE_MAX_FILES = 10'), 'upload valida MIME, 10 arquivos e 25 MB');
+$assert(str_contains($limitsMigration, '26214400'), 'migration amplia o limite persistido para 25 MB');
+$assert(str_contains($routes, '/references/') && str_contains($routes, 'send_reference_image'), 'imagens passam por rota autorizada');
+$assert(str_contains($developer, 'data-copy-image') && str_contains($developer, 'https://3eb.site/parceiro'), 'desenvolvedor pode copiar e abrir editor');
+$assert(str_contains($developer, "\$projectStatus === 'ajustes'"), 'ajustes reabrem edição');
+$assert(str_contains($admin, 'name="rejection_action"'), 'administrador escolhe destino da reprovação');
+$assert(str_contains($workflow, "\$rejectionAction === 'requeue'") && str_contains($workflow, "status = 'cancelada'"), 'reprovação pode reenfileirar ou arquivar');
+$assert(str_contains($javascript, 'pasteImages') && str_contains($javascript, "addEventListener('paste'"), 'colagem de imagens implementada');
+$assert(str_contains($leads, 'data-image-dialog') && str_contains($leads, 'Adicionar imagens'), 'seletor de imagens usa modal');
+$assert(str_contains($routes, "'/leads/new'") && str_contains($leads, 'href="/leads/new"'), 'listagem e formulário usam páginas separadas');
+$assert(str_contains($layout, 'filemtime') && str_contains($layout, 'user.js?v='), 'assets possuem cache busting');
+$assert(str_contains($javascript, 'reference-remove-x') && str_contains($stylesheet, '.reference-remove-x'), 'preview permite remover uma imagem específica');
+$assert(str_contains($routes, 'render_error(413'), 'excesso do POST recebe resposta amigável');
+$assert(str_contains($stylesheet, '.leads-list-only') && str_contains($stylesheet, '.lead-row:hover'), 'leads são exibidos em cartões separados');
+$assert(str_contains($dockerfile, 'upload_max_filesize=25M') && str_contains($dockerfile, 'post_max_size=260M') && str_contains($dockerfile, 'max_file_uploads=10') && str_contains($compose, '/var/www/storage/uploads'), 'runtime preparado para 10 uploads de 25 MB');
+
+$assert(str_contains($security, "img-src 'self' data: blob:"), 'CSP permite previews locais blob');
+$assert(str_contains($operationsMigration, 'configuracoes_operacionais') && str_contains($operationsMigration, 'dev_prazo_horas'), 'migration cria limites operacionais');
+$assert(str_contains($workflow, 'release_expired_developer_assignments') && str_contains($workflow, 'prazo_desenvolvimento_em'), 'prazo do desenvolvedor reenfileira oportunidade');
+$assert(str_contains($developer, 'temperature-') && str_contains($developer, 'developer-project-flow'), 'desenvolvimento mostra temperatura e fluxo vertical');
+$assert(str_contains($workflow, "'retorno_agendado' => 'retorno_agendado'") && str_contains($sales, 'scheduled-banner'), 'retorno comercial salva e recebe destaque');
+$assert(str_contains($sales, 'extra_products[]') && str_contains($admin, 'Produtos Plus'), 'produtos extras fluem do comercial para o admin');
+$assert(str_contains($finance, 'movimentacoes_financeiras') && str_contains($adminFinance, 'Entradas, saídas e despesas'), 'livro financeiro disponível');
+$assert(str_contains($admin, 'Limites operacionais') && str_contains($admin, 'Vendas perdidas'), 'admin controla limites e perdas');
+
+fwrite(STDOUT, "OK: enriquecimento e operação do funil validados.\n");

@@ -32,7 +32,7 @@ function send_security_headers(): void
     header('X-Frame-Options: DENY');
     header('Referrer-Policy: no-referrer');
     header('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()');
-    header("Content-Security-Policy: default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'");
+    header("Content-Security-Policy: default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'");
     header('Cache-Control: no-store, private');
     header('Pragma: no-cache');
     header('X-Request-ID: ' . request_id());

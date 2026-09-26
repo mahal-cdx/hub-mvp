@@ -28,7 +28,7 @@
       <article class="opportunity-row">
         <div class="opportunity-index" aria-hidden="true"><?= e(str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT)) ?></div>
         <div class="opportunity-copy">
-          <span class="status status-neutral">Disponível</span>
+          <div class="status-line"><span class="status status-neutral">Disponível</span><span class="temperature temperature-<?= e($item['temperatura']) ?>">Cadastro <?= e($item['temperatura']) ?></span></div>
           <h3>Nova oportunidade de desenvolvimento</h3>
           <p>Lead, contatos, referências e briefing protegidos até a atribuição.</p>
           <small>Entrada na fila: <?= e($item['created_at']) ?></small>
@@ -67,35 +67,59 @@
       <details class="accordion-card">
         <summary>
           <span class="accordion-main">
-            <span class="status"><?= e(str_replace('_', ' ', $projectStatus)) ?></span>
+            <div class="status-line"><span class="status"><?= e(str_replace('_', ' ', $projectStatus)) ?></span><span class="temperature temperature-<?= e($item['temperatura']) ?>">Cadastro <?= e($item['temperatura']) ?></span></div>
             <strong><?= e($item['projeto_nome'] ?? ('Projeto para ' . $item['lead_nome'])) ?></strong>
             <small><?= e($item['lead_nome']) ?> · assumido em <?= e($item['assumida_em'] ?? '—') ?></small>
           </span>
           <span class="accordion-toggle"><span class="when-closed">Ver projeto</span><span class="when-open">Fechar</span><i aria-hidden="true"></i></span>
         </summary>
 
-        <div class="accordion-body">
-          <section class="briefing-block">
+        <div class="accordion-body developer-project-flow">
+          <?php if ($canEdit && !empty($item['prazo_desenvolvimento_em'])): ?>
+            <div class="deadline-banner">
+              <strong>Prazo da entrega</strong>
+              <span>Envie até <?= e($item['prazo_desenvolvimento_em']) ?>. Após o prazo, a oportunidade volta automaticamente para a fila.</span>
+            </div>
+          <?php endif; ?>
+          <section class="briefing-block developer-briefing">
             <header><p class="section-kicker">Briefing liberado</p><h3><?= e($item['lead_nome']) ?></h3></header>
             <?php if ($contacts !== []): ?><div class="contact-chips"><?php foreach ($contacts as $contact): ?><span><?= e($contact) ?></span><?php endforeach; ?></div><?php endif; ?>
+            <?php if (!empty($item['bio_url'])): ?><p><a class="inline-link" href="<?= e($item['bio_url']) ?>" target="_blank" rel="noopener noreferrer">Abrir link da bio ↗</a></p><?php endif; ?>
             <?php if (!empty($item['bio'])): ?><div class="briefing-item"><strong>Sobre o negócio</strong><p><?= nl2br(e($item['bio'])) ?></p></div><?php endif; ?>
             <?php if (!empty($item['oportunidade_descricao'])): ?><div class="briefing-item"><strong>Descrição da oportunidade</strong><p><?= nl2br(e($item['oportunidade_descricao'])) ?></p></div><?php endif; ?>
             <?php if (!empty($item['observacoes'])): ?><div class="briefing-item"><strong>Observações</strong><p><?= nl2br(e($item['observacoes'])) ?></p></div><?php endif; ?>
-            <?php if (!empty($item['referencias'])): ?><div class="briefing-item"><strong>Referências</strong><p><?= e($item['referencias']) ?></p></div><?php endif; ?>
+            <?php if (!empty($item['referencias'])): ?><div class="briefing-item"><strong>Referências textuais</strong><p><?= e($item['referencias']) ?></p></div><?php endif; ?>
+            <?php if (($item['reference_images'] ?? []) !== []): ?>
+              <div class="briefing-item">
+                <strong>Imagens de referência</strong>
+                <div class="developer-reference-grid">
+                  <?php foreach ($item['reference_images'] as $reference): ?>
+                    <article class="developer-reference">
+                      <img src="/references/<?= e($reference['uuid']) ?>" alt="<?= e($reference['nome_original']) ?>">
+                      <div><strong><?= e($reference['nome_original']) ?></strong><small><?= e(number_format((int) $reference['tamanho_bytes'] / 1048576, 2, ',', '.')) ?> MB</small></div>
+                      <div class="actions">
+                        <a class="button button-secondary button-small" href="/references/<?= e($reference['uuid']) ?>?download=1">Baixar</a>
+                        <button class="button button-secondary button-small" type="button" data-copy-image="/references/<?= e($reference['uuid']) ?>">Copiar imagem</button>
+                      </div>
+                    </article>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+            <?php endif; ?>
           </section>
 
           <?php if ($canEdit): ?>
-            <form class="editor-panel" method="post" action="/dev/submit">
+            <form class="editor-panel developer-delivery" method="post" action="/dev/submit">
               <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
               <input type="hidden" name="opportunity_uuid" value="<?= e($item['uuid']) ?>">
-              <div class="editor-heading"><div><p class="section-kicker">Entrega</p><h3>Editar e enviar para aprovação</h3></div></div>
+              <div class="editor-heading"><div><p class="section-kicker">Entrega</p><h3>Editar e enviar para aprovação</h3></div><a class="button button-secondary" href="https://3eb.site/parceiro" target="_blank" rel="noopener noreferrer">Abrir editor</a></div>
               <label class="field"><span>Nome do projeto</span><input name="project_name" maxlength="180" value="<?= e($item['projeto_nome'] ?? ('Site ' . $item['lead_nome'])) ?>" required></label>
               <label class="field"><span>URL de preview</span><input type="url" name="preview_url" value="<?= e($item['url_preview'] ?? '') ?>" placeholder="https://" required></label>
               <label class="field"><span>Notas para revisão</span><textarea name="description" rows="4"><?= e($item['projeto_descricao'] ?? '') ?></textarea></label>
               <button class="button button-primary button-wide" type="submit"><?= $projectStatus === 'ajustes' ? 'Reenviar ajustes' : 'Enviar para aprovação' ?></button>
             </form>
           <?php else: ?>
-            <div class="review-state">
+            <div class="review-state developer-delivery">
               <div><p class="section-kicker">Entrega enviada</p><h3>Aguardando revisão administrativa</h3><p>O formulário será reaberto caso o projeto retorne para ajustes.</p></div>
               <?php if (!empty($item['url_preview'])): ?><a class="button button-secondary" href="<?= e($item['url_preview']) ?>" target="_blank" rel="noopener noreferrer">Abrir preview</a><?php endif; ?>
             </div>

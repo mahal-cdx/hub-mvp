@@ -25,11 +25,16 @@
     <?php endif; ?>
 
     <?php foreach ($sales['mine'] as $sale): ?>
-      <?php $contacts = array_values(array_filter(explode(' | ', (string) ($sale['contatos'] ?? '')))); ?>
+      <?php
+        $contacts = array_values(array_filter(explode(' | ', (string) ($sale['contatos'] ?? ''))));
+        $selectedProducts = $sale['selected_product_ids'] ?? [];
+        $isScheduled = $sale['status'] === 'retorno_agendado';
+      ?>
       <details class="accordion-card sales-accordion">
         <summary>
           <span class="accordion-main">
-            <span class="status"><?= e(str_replace('_', ' ', $sale['status'])) ?></span>
+            <span class="status status-<?= e($sale['status']) ?>"><?= e(str_replace('_', ' ', $sale['status'])) ?></span>
+            <?php if ($isScheduled && !empty($sale['proximo_contato_em'])): ?><span class="scheduled-summary">Retorno: <?= e($sale['proximo_contato_em']) ?></span><?php endif; ?>
             <strong><?= e($sale['projeto_nome']) ?></strong>
             <small><?= e($sale['lead_nome']) ?> · R$ <?= e(number_format((float) $sale['valor_brl'], 2, ',', '.')) ?></small>
           </span>
@@ -37,6 +42,9 @@
         </summary>
 
         <div class="accordion-body sales-body">
+          <?php if ($isScheduled && !empty($sale['proximo_contato_em'])): ?>
+            <div class="scheduled-banner"><strong>Retorno agendado</strong><span>Próximo contato em <?= e($sale['proximo_contato_em']) ?></span></div>
+          <?php endif; ?>
           <section class="lead-access-card">
             <div><p class="section-kicker">Dados liberados</p><h3><?= e($sale['lead_nome']) ?></h3></div>
             <div class="contact-chips"><?php if ($contacts === []): ?><span>Sem contatos cadastrados</span><?php endif; ?><?php foreach ($contacts as $contact): ?><span><?= e($contact) ?></span><?php endforeach; ?></div>
@@ -53,8 +61,20 @@
             <div class="editor-heading"><div><p class="section-kicker">Acompanhamento</p><h3>Registrar atendimento</h3></div></div>
             <div class="form-grid">
               <label class="field"><span>Canal</span><select name="channel"><option value="whatsapp">WhatsApp</option><option value="email">E-mail</option><option value="instagram">Instagram</option><option value="telefone">Telefone</option><option value="outro">Outro</option></select></label>
-              <label class="field"><span>Resultado</span><select name="result"><option value="contato_realizado">Contato realizado</option><option value="retorno_agendado">Retorno agendado</option><option value="aguardando_pagamento">Aguardando pagamento</option><option value="perdido">Perdido</option></select></label>
-              <label class="field field-full"><span>Próximo contato</span><input type="datetime-local" name="next_contact_at"></label>
+              <label class="field"><span>Resultado</span><select name="result"><option value="contato_realizado">Contato realizado</option><option value="retorno_agendado" <?= $sale['status'] === 'retorno_agendado' ? 'selected' : '' ?>>Retorno agendado</option><option value="aguardando_pagamento" <?= $sale['status'] === 'aguardando_pagamento' ? 'selected' : '' ?>>Aguardando pagamento</option><option value="perdido">Perdido</option></select></label>
+              <label class="field field-full"><span>Próximo contato</span><input type="datetime-local" name="next_contact_at" value="<?= !empty($sale['proximo_contato_em']) ? e(date('Y-m-d\\TH:i', strtotime($sale['proximo_contato_em']))) : '' ?>"></label>
+              <fieldset class="field field-full extras-fieldset">
+                <legend>Produtos e melhorias para a próxima etapa</legend>
+                <p>Marque os itens que o cliente demonstrou interesse após o primeiro pagamento.</p>
+                <div class="extras-grid">
+                  <?php foreach ($extraProducts as $product): ?>
+                    <label class="extra-option">
+                      <input type="checkbox" name="extra_products[]" value="<?= e($product['uuid']) ?>" <?= in_array($product['uuid'], $selectedProducts, true) ? 'checked' : '' ?>>
+                      <span><strong><?= e($product['nome']) ?></strong><?php if (!empty($product['descricao'])): ?><small><?= e($product['descricao']) ?></small><?php endif; ?></span>
+                    </label>
+                  <?php endforeach; ?>
+                </div>
+              </fieldset>
               <label class="field field-full"><span>Observações</span><textarea name="notes" rows="4"></textarea></label>
             </div>
             <button class="button button-primary button-wide" type="submit">Registrar atendimento</button>

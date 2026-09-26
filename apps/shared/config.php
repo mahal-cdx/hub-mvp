@@ -46,6 +46,7 @@ function config(?string $key = null): mixed
             'url' => rtrim(env_value('APP_URL', 'http://localhost:6041'), '/'),
             'app_key' => $appKey,
             'app_root' => env_value('APP_ROOT', '/var/www/app'),
+            'upload_root' => env_value('UPLOAD_ROOT', '/var/www/storage/uploads'),
             'session_secure' => $sessionSecure,
             'session_idle_timeout' => max(300, (int) env_value('SESSION_IDLE_TIMEOUT', '1800')),
             'session_absolute_timeout' => max(1800, (int) env_value('SESSION_ABSOLUTE_TIMEOUT', '28800')),

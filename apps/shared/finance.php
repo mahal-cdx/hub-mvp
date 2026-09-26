@@ -302,7 +302,7 @@ function confirm_manual_payment(array $input, array $actor): array
     try {
         $find = $connection->prepare(
             "SELECT v.id venda_id, v.status, v.comercial_usuario_id, o.id oferta_id, o.valor_brl,
-                    p.desenvolvedor_usuario_id, op.id oportunidade_id, op.uuid oportunidade_uuid,
+                    p.id projeto_id, p.desenvolvedor_usuario_id, op.id oportunidade_id, op.uuid oportunidade_uuid,
                     l.captador_usuario_id
              FROM vendas v
              INNER JOIN ofertas o ON o.id = v.oferta_id
@@ -366,6 +366,24 @@ function confirm_manual_payment(array $input, array $actor): array
         $connection->prepare(
             "UPDATE oportunidades SET status = 'vendida', encerrada_em = CURRENT_TIMESTAMP(6) WHERE id = :id"
         )->execute(['id' => $sale['oportunidade_id']]);
+
+        $ledger = $connection->prepare(
+            "INSERT INTO movimentacoes_financeiras
+                (uuid, tipo, categoria, descricao, valor_brl, projeto_id, venda_id,
+                 origem_tipo, origem_uuid, competencia, criado_por_usuario_id)
+             VALUES
+                (:uuid, 'entrada', 'venda_projeto', :description, :value_brl, :project_id, :sale_id,
+                 'pagamento_venda', :origin_uuid, CURRENT_DATE, :actor_id)"
+        );
+        $ledger->execute([
+            'uuid' => uuid_v4(),
+            'description' => 'Pagamento aprovado da venda ' . $saleUuid,
+            'value_brl' => $sale['valor_brl'],
+            'project_id' => $sale['projeto_id'],
+            'sale_id' => $sale['venda_id'],
+            'origin_uuid' => $saleUuid,
+            'actor_id' => $actor['id'],
+        ]);
 
         $credits = [
             'captador' => award_points($connection, (int) $sale['captador_usuario_id'], 'venda_paga_captador', 'venda', $saleUuid, $actor['uuid']),
@@ -732,4 +750,97 @@ function transition_withdrawal(array $input, array $actor): void
         }
         throw $error;
     }
+}
+
+
+function list_financial_movements(): array
+{
+    $summaryRows = db()->query(
+        "SELECT tipo, COALESCE(SUM(valor_brl), 0) total
+         FROM movimentacoes_financeiras
+         GROUP BY tipo"
+    )->fetchAll();
+    $summary = ['entrada' => 0.0, 'saida' => 0.0, 'despesa' => 0.0];
+    foreach ($summaryRows as $row) {
+        $summary[$row['tipo']] = (float) $row['total'];
+    }
+    $summary['saldo'] = $summary['entrada'] - $summary['saida'] - $summary['despesa'];
+
+    $items = db()->query(
+        "SELECT mf.uuid, mf.tipo, mf.categoria, mf.descricao, mf.valor_brl,
+                mf.competencia, mf.created_at, p.nome projeto_nome, u.nome criado_por
+         FROM movimentacoes_financeiras mf
+         LEFT JOIN projetos p ON p.id = mf.projeto_id
+         INNER JOIN usuarios u ON u.id = mf.criado_por_usuario_id
+         ORDER BY mf.competencia DESC, mf.created_at DESC
+         LIMIT 200"
+    )->fetchAll();
+
+    return ['summary' => $summary, 'items' => $items];
+}
+
+function list_finance_projects(): array
+{
+    return db()->query(
+        "SELECT uuid, nome FROM projetos
+         WHERE status IN ('aprovado','em_revisao','ajustes')
+         ORDER BY nome"
+    )->fetchAll();
+}
+
+function record_financial_movement(array $input, array $actor): void
+{
+    $type = (string) ($input['type'] ?? '');
+    $category = trim((string) ($input['category'] ?? ''));
+    $description = trim((string) ($input['description'] ?? ''));
+    $value = (float) str_replace(',', '.', (string) ($input['value_brl'] ?? '0'));
+    $competence = (string) ($input['competence'] ?? '');
+    $projectUuid = trim((string) ($input['project_uuid'] ?? ''));
+
+    if (!in_array($type, ['entrada','saida','despesa'], true)) {
+        throw new InvalidArgumentException('Tipo financeiro inválido.');
+    }
+    if (strlen($category) < 2 || strlen($category) > 80 || strlen($description) < 3 || strlen($description) > 255) {
+        throw new InvalidArgumentException('Informe categoria e descrição válidas.');
+    }
+    if ($value <= 0 || $value > 9999999999) {
+        throw new InvalidArgumentException('Valor financeiro inválido.');
+    }
+    $date = DateTimeImmutable::createFromFormat('Y-m-d', $competence);
+    if (!$date || $date->format('Y-m-d') !== $competence) {
+        throw new InvalidArgumentException('Competência inválida.');
+    }
+
+    $connection = db();
+    $projectId = null;
+    if ($projectUuid !== '') {
+        $project = $connection->prepare('SELECT id FROM projetos WHERE uuid = :uuid');
+        $project->execute(['uuid' => $projectUuid]);
+        $projectId = $project->fetchColumn();
+        if ($projectId === false) {
+            throw new InvalidArgumentException('Projeto financeiro não encontrado.');
+        }
+    }
+
+    $uuid = uuid_v4();
+    $statement = $connection->prepare(
+        'INSERT INTO movimentacoes_financeiras
+            (uuid, tipo, categoria, descricao, valor_brl, projeto_id, competencia, criado_por_usuario_id)
+         VALUES
+            (:uuid, :type, :category, :description, :value_brl, :project_id, :competence, :actor_id)'
+    );
+    $statement->execute([
+        'uuid' => $uuid,
+        'type' => $type,
+        'category' => $category,
+        'description' => $description,
+        'value_brl' => number_format($value, 2, '.', ''),
+        'project_id' => $projectId === null ? null : (int) $projectId,
+        'competence' => $competence,
+        'actor_id' => $actor['id'],
+    ]);
+    audit_event($connection, 'financeiro.movimentacao_criada', 'movimentacao_financeira', $uuid, $actor['uuid'], [
+        'tipo' => $type,
+        'valor_brl' => $value,
+    ]);
 }

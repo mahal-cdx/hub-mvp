@@ -44,7 +44,7 @@ if ($method === 'GET' && $path === '/') {
         'users' => (int) $connection->query("SELECT COUNT(*) FROM usuarios WHERE status = 'ativo'")->fetchColumn(),
         'leads' => (int) $connection->query("SELECT COUNT(*) FROM leads WHERE status <> 'descartado'")->fetchColumn(),
         'revisoes' => (int) $connection->query("SELECT COUNT(*) FROM projeto_revisoes WHERE decisao = 'pendente'")->fetchColumn(),
-        'vendas' => (int) $connection->query("SELECT COUNT(*) FROM vendas WHERE status IN ('disponivel','em_atendimento','aguardando_pagamento')")->fetchColumn(),
+        'vendas' => (int) $connection->query("SELECT COUNT(*) FROM vendas WHERE status IN ('disponivel','em_atendimento','retorno_agendado','aguardando_pagamento')")->fetchColumn(),
     ];
     $events = $connection->query(
         'SELECT acao, entidade_tipo, ocorrido_em FROM eventos_auditoria ORDER BY ocorrido_em DESC LIMIT 8'
@@ -116,9 +116,36 @@ if ($method === 'GET' && $path === '/projects') {
         'title' => 'Revisão de projetos',
         'user' => $user,
         'reviews' => list_pending_project_reviews(),
+        'projects' => list_admin_projects_overview(),
+        'lostSales' => list_lost_sales(),
+        'operationalSettings' => list_operational_settings(),
         'error' => null,
         'success' => isset($_GET['saved']),
     ]);
+}
+
+if ($method === 'POST' && in_array($path, ['/projects/settings','/projects/cost'], true)) {
+    $user = require_admin();
+    require_csrf();
+    try {
+        if ($path === '/projects/settings') {
+            save_operational_settings($_POST, $user);
+        } else {
+            save_project_hosting_cost($_POST, $user);
+        }
+        redirect('/projects?saved=1');
+    } catch (InvalidArgumentException $error) {
+        render('projects', [
+            'title' => 'Projetos e operação',
+            'user' => $user,
+            'reviews' => list_pending_project_reviews(),
+            'projects' => list_admin_projects_overview(),
+            'lostSales' => list_lost_sales(),
+            'operationalSettings' => list_operational_settings(),
+            'error' => $error->getMessage(),
+            'success' => false,
+        ], 422);
+    }
 }
 
 if ($method === 'POST' && $path === '/projects/review') {
@@ -146,12 +173,14 @@ if ($method === 'GET' && $path === '/finance') {
         'rules' => list_scoring_rules(),
         'quote' => current_point_quote(),
         'payments' => list_pending_payments(),
+        'ledger' => list_financial_movements(),
+        'financeProjects' => list_finance_projects(),
         'error' => null,
         'success' => isset($_GET['saved']),
     ]);
 }
 
-if ($method === 'POST' && in_array($path, ['/finance/rules','/finance/quote','/finance/payment'], true)) {
+if ($method === 'POST' && in_array($path, ['/finance/rules','/finance/quote','/finance/payment','/finance/movement'], true)) {
     $user = require_admin();
     require_csrf();
     try {
@@ -159,8 +188,10 @@ if ($method === 'POST' && in_array($path, ['/finance/rules','/finance/quote','/f
             save_scoring_rule($_POST, $user);
         } elseif ($path === '/finance/quote') {
             save_point_quote($_POST, $user);
-        } else {
+        } elseif ($path === '/finance/payment') {
             confirm_manual_payment($_POST, $user);
+        } else {
+            record_financial_movement($_POST, $user);
         }
         redirect('/finance?saved=1');
     } catch (InvalidArgumentException $error) {
@@ -170,6 +201,8 @@ if ($method === 'POST' && in_array($path, ['/finance/rules','/finance/quote','/f
             'rules' => list_scoring_rules(),
             'quote' => current_point_quote(),
             'payments' => list_pending_payments(),
+            'ledger' => list_financial_movements(),
+            'financeProjects' => list_finance_projects(),
             'error' => $error->getMessage(),
             'success' => false,
         ], 422);
@@ -204,7 +237,7 @@ if ($method === 'POST' && $path === '/withdrawals/action') {
     }
 }
 
-if (in_array($path, ['/login','/logout','/users','/users/new','/projects','/projects/review','/finance','/finance/rules','/finance/quote','/finance/payment','/withdrawals','/withdrawals/action','/'], true)) {
+if (in_array($path, ['/login','/logout','/users','/users/new','/projects','/projects/review','/projects/settings','/projects/cost','/finance','/finance/rules','/finance/quote','/finance/payment','/finance/movement','/withdrawals','/withdrawals/action','/'], true)) {
     header('Allow: GET, POST');
     render_error(405, 'Método não permitido.');
 }
