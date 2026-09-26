@@ -1,6 +1,7 @@
 <?php
 $pageTitle = ($title ?? config('name')) . ' · ' . config('name');
 $authenticated = is_array($user ?? null);
+$currentPath = route_path();
 ?>
 <!doctype html>
 <html lang="pt-BR" data-theme="dark">
@@ -21,6 +22,13 @@ $authenticated = is_array($user ?? null);
         <span class="brand-symbol">;3</span>
         <span><strong>Threeebs Hub</strong><small>Administração</small></span>
       </a>
+      <nav class="main-nav" aria-label="Navegação principal">
+        <a class="<?= $currentPath === '/' ? 'active' : '' ?>" href="/">Visão geral</a>
+        <a class="<?= str_starts_with($currentPath, '/users') ? 'active' : '' ?>" href="/users">Usuários</a>
+        <a class="<?= str_starts_with($currentPath, '/projects') ? 'active' : '' ?>" href="/projects">Projetos</a>
+        <a class="<?= str_starts_with($currentPath, '/finance') ? 'active' : '' ?>" href="/finance">Financeiro</a>
+        <a class="<?= str_starts_with($currentPath, '/withdrawals') ? 'active' : '' ?>" href="/withdrawals">Saques</a>
+      </nav>
       <div class="user-menu">
         <span><strong><?= e($user['name']) ?></strong><small>Administrador</small></span>
         <form method="post" action="/logout">

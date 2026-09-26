@@ -1,0 +1,6 @@
+<section class="page-head"><div><p class="eyebrow">Seu ambiente</p><h1>Olá, <?= e($user['name']) ?>.</h1><p>Acesse apenas as etapas atribuídas às suas funções.</p></div><div class="metric-card"><span>Saldo disponível</span><strong><?= e((string) $wallet['saldo_disponivel_pontos']) ?> pts</strong><small>Valor do ponto é definido pela administração.</small></div></section>
+<section class="workspace-grid">
+<?php if (user_has_role($user, 'captador')): ?><a class="workspace-card" href="/leads"><span class="role-badge">Captador</span><h2>Cadastrar leads</h2><p>Registre contatos e informações que qualificam a oportunidade.</p><strong>Abrir ambiente →</strong></a><?php endif; ?>
+<?php if (user_has_role($user, 'desenvolvedor')): ?><a class="workspace-card" href="/dev"><span class="role-badge">Desenvolvedor</span><h2>Criar projetos</h2><p>Assuma oportunidades, desenvolva e envie a URL para aprovação.</p><strong>Abrir ambiente →</strong></a><?php endif; ?>
+<?php if (user_has_role($user, 'comercial')): ?><a class="workspace-card" href="/sales"><span class="role-badge">Comercial</span><h2>Realizar vendas</h2><p>Assuma projetos aprovados, contate o lead e registre o atendimento.</p><strong>Abrir ambiente →</strong></a><?php endif; ?>
+</section>

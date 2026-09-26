@@ -4,14 +4,14 @@
     <h1>Olá, <?= e($user['name']) ?>.</h1>
     <p>Acompanhe os pontos que exigem atenção na operação do Hub.</p>
   </div>
-  <span class="status-badge"><i></i>Sessão protegida</span>
+  <a class="button button-primary" href="/users/new">Criar usuário</a>
 </section>
 
 <section class="metric-grid" aria-label="Indicadores">
+  <article class="metric-card"><span>Usuários ativos</span><strong><?= e($metrics['users']) ?></strong><small>Equipe operacional</small></article>
   <article class="metric-card"><span>Leads ativos</span><strong><?= e($metrics['leads']) ?></strong><small>Captação e qualificação</small></article>
   <article class="metric-card"><span>Revisões pendentes</span><strong><?= e($metrics['revisoes']) ?></strong><small>Projetos aguardando decisão</small></article>
   <article class="metric-card"><span>Fila comercial</span><strong><?= e($metrics['vendas']) ?></strong><small>Projetos disponíveis ou em contato</small></article>
-  <article class="metric-card"><span>Saques pendentes</span><strong><?= e($metrics['saques']) ?></strong><small>Solicitações que exigem análise</small></article>
 </section>
 
 <section class="panel-grid">
@@ -32,10 +32,7 @@
     <?php else: ?>
       <ul class="event-list">
         <?php foreach ($events as $event): ?>
-          <li>
-            <span><?= e(str_replace('.', ' · ', $event['acao'])) ?></span>
-            <small><?= e($event['entidade_tipo']) ?> · <?= e($event['ocorrido_em']) ?></small>
-          </li>
+          <li><span><?= e(str_replace('.', ' · ', $event['acao'])) ?></span><small><?= e($event['entidade_tipo']) ?> · <?= e($event['ocorrido_em']) ?></small></li>
         <?php endforeach; ?>
       </ul>
     <?php endif; ?>
