@@ -2,6 +2,6 @@
 /storage/*
 !/storage/logs/
 !/storage/uploads/
-!/storage/logs/admin/
-!/storage/logs/users/
+/storage/logs/**/*.log
+/storage/uploads/*
 !/storage/uploads/.gitkeep

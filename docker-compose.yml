@@ -25,6 +25,7 @@ x-app-service: &app-service
     context: .
     dockerfile: infrastructure/apache/Dockerfile
   restart: unless-stopped
+  command: ["sh", "-c", "mkdir -p /var/www/storage/uploads && chown -R www-data:www-data /var/www/storage/uploads && exec apache2-foreground"]
   depends_on:
     mysql:
       condition: service_healthy
